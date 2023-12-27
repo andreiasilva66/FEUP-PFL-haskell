@@ -1,22 +1,25 @@
-module Stack (Stack, -- exportar o tipo
+module Stack (Stack, StackElement,-- exportar o tipo
         push, pop, top, -- e as operações
         empty, isEmpty) where
-data Stack a = Stk [a] -- implementação usando listas
 
-push :: a -> Stack a -> Stack a
-push x (Stk xs) = Stk (x:xs)
+data StackElement = BoolElem Bool | IntElem Integer
 
-pop :: Stack a -> Stack a
-pop (Stk (_:xs)) = Stk xs
-pop _ = error "Stack.pop: empty stack"
+type Stack = [StackElement]
 
-top :: Stack a -> a
-top (Stk (x:_)) = x
-top _ = error "Stack.top: empty stack"
+push :: StackElement -> Stack -> Stack
+push x xs = x : xs
 
-empty :: Stack a
-empty = Stk []
+pop :: Stack -> Stack
+pop (_:xs) = xs
+pop _      = error "Stack.pop: empty stack"
 
-isEmpty :: Stack a -> Bool
-isEmpty (Stk [])= True
-isEmpty (Stk _) = False
+top :: Stack -> StackElement
+top (x:_) = x
+top _     = error "Stack.top: empty stack"
+
+empty :: Stack
+empty = []
+
+isEmpty :: Stack -> Bool
+isEmpty [] = True
+isEmpty _  = False

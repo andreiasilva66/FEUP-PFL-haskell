@@ -1,5 +1,6 @@
--- PFL 2023/24 - Haskell practical assignment quickstart
--- Updated on 15/12/2023
+module Main where
+
+import Stack
 
 -- Part 1
 
@@ -10,11 +11,11 @@ data Inst =
   deriving Show
 type Code = [Inst]
 
--- createEmptyStack :: Stack
-createEmptyStack = undefined -- TODO, Uncomment the function signature after defining Stack
+createEmptyStack :: Stack 
+createEmptyStack = empty
 
--- stack2Str :: Stack -> String
-stack2Str = undefined -- TODO, Uncomment all the other function type declarations as you implement them
+--stack2Str :: Stack -> String
+stack2Str stk = concatMap (\x -> show x ++ ",") (reverse stk)
 
 -- createEmptyState :: State
 createEmptyState = undefined -- TODO, Uncomment the function signature after defining State
