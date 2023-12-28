@@ -1,3 +1,4 @@
+import Data.List (intercalate)
 import Stack
 
 data Inst =
@@ -7,17 +8,21 @@ data Inst =
 
 type Code = [Inst]
 
-type Storage = [(String, StackElement)]
-
-type State = (Code, Stack, Storage)
+type State = [(String, StackElement)]
 
 createEmptyStack :: Stack 
 createEmptyStack = empty
 
--- stack2Str :: Stack -> String
--- stack2Str s
---   | isEmpty s = ""
---   | otherwise = show (top s) ++ if isEmpty (pop s) then "" else "," ++ stack2Str (pop s)
+stack2Str :: Stack -> String
+stack2Str s
+  | isEmpty s = ""
+  | otherwise = show (top s) ++ if isEmpty (pop s) then "" else "," ++ stack2Str (pop s)
 
 createEmptyState :: State
-createEmptyState = ([], createEmptyStack, [])
+createEmptyState = []
+
+state2Str :: State -> String
+state2Str state = intercalate "," (map element2Str state)
+  where
+    element2Str :: (String, StackElement) -> String
+    element2Str (name, element) = name ++ "=" ++ show element

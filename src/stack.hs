@@ -2,7 +2,7 @@ module Stack (Stack, StackElement,-- exportar o tipo
         push, pop, top, -- e as operações
         empty, isEmpty) where
 
-data StackElement = BoolElem Bool | IntElem Integer
+data StackElement = BoolElem Bool | IntElem Integer deriving Show
 
 type Stack = [StackElement]
 
