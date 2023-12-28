@@ -92,6 +92,16 @@ run ( Branch c1 c2 :rest, stack, state) = run(if getBool stack then run(c1,stack
 run ( Loop c1 c2 :rest, stack, state) = run(c1,stack,state)
 run ( Noop :rest, stack, state) = run (rest, stack, state)
 
+
+testAssembler :: Code -> (String, String)
+testAssembler code = (stack2Str stack, state2Str state)
+  where (_,stack,state) = run(code, createEmptyStack, createEmptyState)
+
+
+main :: IO ()
+main = do
+  print (testAssembler [Push 1,Push 2,Add,Store "x"])
+
 {-
 performOperation :: String -> Stack -> Stack  
 performOperation "+" stack = case (top stack, top (pop stack)) of
