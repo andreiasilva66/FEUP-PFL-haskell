@@ -1,4 +1,4 @@
-module Stack (Stack, StackElement,-- exportar o tipo
+module Stack (Stack, StackElement(IntElem, BoolElem),-- exportar o tipo
         push, pop, top, -- e as operações
         empty, isEmpty) where
 
@@ -23,3 +23,9 @@ empty = []
 isEmpty :: Stack -> Bool
 isEmpty [] = True
 isEmpty _  = False
+
+-- operaçoes
+
+performAddition :: StackElement -> StackElement -> StackElement
+performAddition (IntElem x) (IntElem y) = IntElem (x + y)
+performAddition _ _ = error "Stack.performAddition: not integers"
