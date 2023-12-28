@@ -1,5 +1,3 @@
-module Main where
-
 import Stack
 
 -- Part 1
