@@ -1,33 +1,121 @@
+import Data.List (intercalate, sortOn)
 import Stack
 
--- Part 1
-
--- Do not modify our definition of Inst and Code
 data Inst =
   Push Integer | Add | Mult | Sub | Tru | Fals | Equ | Le | And | Neg | Fetch String | Store String | Noop |
   Branch Code Code | Loop Code Code
   deriving Show
 type Code = [Inst]
 
+type State = [(String, StackElement)]
+
+
+
 createEmptyStack :: Stack 
 createEmptyStack = empty
 
---stack2Str :: Stack -> String
-stack2Str stk = concatMap (\x -> show x ++ ",") (reverse stk)
+stack2Str :: Stack -> String
+stack2Str s
+  | isEmpty s = ""
+  | otherwise = case top s of
+                  IntElem x  -> show x
+                  BoolElem b -> show b
+                ++ if isEmpty (pop s) then "" else "," ++ stack2Str (pop s)
 
--- createEmptyState :: State
-createEmptyState = undefined -- TODO, Uncomment the function signature after defining State
+createEmptyState :: State
+createEmptyState = []
 
--- state2Str :: State -> String
-state2Str = undefined -- TODO
+state2Str :: State -> String
+state2Str state = intercalate "," (map element2Str (sortByName state))
+  where
+    sortByName :: State -> State
+    sortByName = sortOn fst
 
--- run :: (Code, Stack, State) -> (Code, Stack, State)
-run = undefined -- TODO
+    element2Str :: (String, StackElement) -> String
+    element2Str (name, element) = name ++ "=" ++ case element of
+                                                  IntElem x  -> show x
+                                                  BoolElem b -> show b
 
--- To help you test your assembler
+-- vai buscar o int no topo da stack
+getInt :: Stack -> Integer
+getInt stack = case top stack of
+  IntElem x -> x
+  _         -> error $ "Run-time error" 
+
+
+-- vai buscar a bool no topo da stack
+getBool :: Stack -> Bool
+getBool stack = case top stack of
+  BoolElem x -> x
+  _          -> error $ "Run-time error" 
+
+-- ve se sao iguais
+equal :: Stack -> Bool
+equal stack = case (top stack, top (pop stack)) of
+  (IntElem x, IntElem y) -> x == y
+  (BoolElem x, BoolElem y) -> x == y
+  _                      -> error $ "Run-time error" 
+
+
+-- ve se e menor ou igual
+lessEqual :: Integer -> Integer -> Bool
+lessEqual x y = x <= y
+
+
+-- 
+fetch :: String -> State -> Stack -> Stack
+fetch x state stack = case lookup x state of
+  Just x -> push x stack
+  Nothing -> error $ "Run-time error" 
+
+
+store :: String -> State -> Stack -> State
+store x st stack =
+  case top stack of
+    IntElem val -> updateState (x, IntElem val) st
+    BoolElem val -> updateState (x, BoolElem val) st
+  where
+    updateState :: (String, StackElement) -> State -> State
+    updateState entry state =
+      case lookup (fst entry) state of
+        Just _  -> entry : filter (\(name, _) -> name /= fst entry) state
+        Nothing -> entry : state
+
+tt :: Bool
+tt = True
+
+ff :: Bool
+ff = False
+
+run :: (Code, Stack, State) -> (Code, Stack, State)
+run ([], stack, states) = ([], stack, states)
+run ( Add :rest, stack, state) = run (rest, push (IntElem (getInt stack + getInt (pop stack))) (pop (pop stack)), state)
+run ( Mult :rest, stack, state) = run (rest, push (IntElem (getInt stack * getInt (pop stack))) (pop (pop stack)), state)
+run ( Sub :rest, stack, state) = run (rest, push (IntElem (getInt stack - getInt (pop stack))) (pop (pop stack)), state)
+run ( Tru :rest, stack, state) = run (rest, push (BoolElem tt) stack, state)
+run ( Fals :rest, stack, state) = run (rest, push (BoolElem ff) stack, state)
+run ( Push x :rest, stack, state) = run (rest, push (IntElem x) stack, state)
+run ( Equ :rest, stack, state) = run (rest, push (BoolElem (equal stack)) (pop (pop stack)), state)
+run ( Le :rest, stack, state) = run (rest, push (BoolElem (lessEqual (getInt stack) (getInt (pop stack)))) (pop (pop stack)), state)
+run ( And :rest, stack, state) = run (rest, push (BoolElem (getBool stack && getBool (pop stack))) (pop (pop stack)), state)
+run ( Neg :rest , stack, state) = run (rest , push (BoolElem (not (getBool stack))) (pop stack), state)
+run ( Fetch x :rest, stack, state) = run (rest, fetch x state stack, state)
+run ( Store x :rest, stack, state) = run (rest, pop stack, store x state stack)
+run (Branch c1 c2: code,(BoolElem boole:stackRest),state)
+                                                    | boole == True = run (c1 ++ code,stackRest,state)
+                                                    | otherwise = run (c2 ++ code,stackRest,state)
+run (Loop c1 c2: code,stack,state) = run ((c1 ++ [Branch (c2 ++ [Loop c1 c2]) [Noop]]) ++ code,stack,state)
+run ( Noop :rest, stack, state) = run (rest, stack, state)
+
+
 testAssembler :: Code -> (String, String)
 testAssembler code = (stack2Str stack, state2Str state)
   where (_,stack,state) = run(code, createEmptyStack, createEmptyState)
+
+
+main :: IO ()
+main = do
+  print(testAssembler [Push 10,Push 4,Push 3,Sub,Mult] == ("-10",""))
 
 -- Examples:
 -- testAssembler [Push 10,Push 4,Push 3,Sub,Mult] == ("-10","")
@@ -63,9 +151,9 @@ compile = undefined -- TODO
 parse = undefined -- TODO
 
 -- To help you test your parser
-testParser :: String -> (String, String)
-testParser programCode = (stack2Str stack, store2Str store)
-  where (_,stack,store) = run(compile (parse programCode), createEmptyStack, createEmptyStore)
+-- testParser :: String -> (String, String)
+-- testParser programCode = (stack2Str stack, store2Str store)
+--   where (_,stack,store) = run(compile (parse programCode), createEmptyStack, createEmptyStore)
 
 -- Examples:
 -- testParser "x := 5; x := x - 1;" == ("","x=4")
