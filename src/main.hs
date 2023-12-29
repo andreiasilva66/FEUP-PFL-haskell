@@ -1,5 +1,7 @@
 import Data.List (intercalate, sortOn)
 import Stack
+import Text.Parsec hiding (State)
+import Text.Parsec.String (Parser)
 
 data Inst =
   Push Integer | Add | Mult | Sub | Tru | Fals | Equ | Le | And | Neg | Fetch String | Store String | Noop |
@@ -137,18 +139,148 @@ main = do
 -- Part 2
 
 -- TODO: Define the types Aexp, Bexp, Stm and Program
+data Aexp
+  = Var String            -- Variable
+  | Num Integer           -- Integer literal
+  | AAdd Aexp Aexp        -- Addition
+  | ASub Aexp Aexp        -- Subtraction
+  | AMul Aexp Aexp        -- Multiplication
+  deriving Show
 
--- compA :: Aexp -> Code
-compA = undefined -- TODO
+data Bexp
+  = BTrue                 -- True constant
+  | BFalse                -- False constant
+  | Eq Aexp Aexp          -- Equality
+  | Not Bexp              -- Logical negation
+  deriving Show
 
--- compB :: Bexp -> Code
-compB = undefined -- TODO
+data Stm
+  = Assign String Aexp    -- Assignment
+  | Seq Stm Stm           -- Sequence of statements
+  | If Bexp Stm Stm       -- If-then-else statement
+  | While Bexp Stm        -- While loop
+  deriving Show
 
--- compile :: Program -> Code
-compile = undefined -- TODO
+type Program = [Stm]
 
--- parse :: String -> Program
-parse = undefined -- TODO
+-- Compiler functions
+compA :: Aexp -> Code
+compA (Var x) = [Fetch x]
+compA (Num n) = [Push n]
+compA (AAdd a1 a2) = compA a1 ++ compA a2 ++ [Add]
+compA (ASub a1 a2) = compA a1 ++ compA a2 ++ [Sub]
+compA (AMul a1 a2) = compA a1 ++ compA a2 ++ [Mult]
+
+compB :: Bexp -> Code
+compB BTrue = [Tru]
+compB BFalse = [Fals]
+compB (Eq a1 a2) = compA a1 ++ compA a2 ++ [Equ]
+compB (Not b) = compB b ++ [Neg]
+
+compile :: Program -> Code
+compile [] = []
+compile (stmt:rest) = case stmt of
+  Assign var expr -> compA expr ++ [Store var] ++ compile rest
+  Seq s1 s2 -> compile [s1] ++ compile [s2] ++ compile rest
+  If cond thenStm elseStm -> compB cond ++ [Branch (compile [thenStm]) (compile [elseStm])] ++ compile rest
+  While cond body -> [Loop (compB cond) (compile [body])] ++ compile rest
+
+
+-- -- Lexer
+-- lexer :: Parser [String]
+-- lexer = sepBy (many1 (alphaNum <|> oneOf "+-*/=<>!&|")) spaces
+
+-- -- Parse arithmetic expression
+-- parseAexp :: Parser Aexp
+-- parseAexp = do
+--   tokens <- lexer
+--   return $ buildAexp tokens
+
+-- buildAexp :: [String] -> Aexp
+-- buildAexp [var] = Var var
+-- buildAexp [num] = Num (read num)
+-- buildAexp (op : tokens)
+--   | op `elem` ["+", "-", "*"] =
+--     let (left, right) = splitAt (length tokens `div` 2) tokens
+--      in case op of
+--           "+" -> AAdd (buildAexp left) (buildAexp right)
+--           "-" -> ASub (buildAexp left) (buildAexp right)
+--           "*" -> AMul (buildAexp left) (buildAexp right)
+--   | otherwise = error "Invalid arithmetic expression"
+
+-- -- Parse boolean expression
+-- parseBexp :: Parser Bexp
+-- parseBexp = do
+--   tokens <- lexer
+--   return $ buildBexp tokens
+
+-- buildBexp :: [String] -> Bexp
+-- buildBexp ["true"] = BTrue
+-- buildBexp ["false"] = BFalse
+-- buildBexp [var] = Var var
+-- buildBexp [num] = Num (read num)
+-- buildBexp ["not", rest] = Not (buildBexp [rest])
+-- buildBexp (op : tokens)
+--   | op `elem` ["==", "<=", "&&"] =
+--     let (left, right) = splitAt (length tokens `div` 2) tokens
+--      in case op of
+--           "==" -> Eq (buildAexp left) (buildAexp right)
+--           "<=" -> Le (buildAexp left) (buildAexp right)
+--           "&&" -> And (buildBexp left) (buildBexp right)
+--   | otherwise = error "Invalid boolean expression"
+
+-- -- Parse assignment statement
+-- parseAssign :: Parser Stm
+-- parseAssign = do
+--   var <- many1 lower
+--   spaces
+--   _ <- char '='
+--   spaces
+--   expr <- lexer
+--   _ <- char ';'
+--   return $ Assign var (buildAexp expr)
+
+-- -- Parse sequence of statements
+-- parseSeq :: Parser Stm
+-- parseSeq = do
+--   stmts <- sepBy1 parseStmt (char ';')
+--   return $ foldr1 Seq stmts
+
+-- -- Parse if-then-else statement
+-- parseIf :: Parser Stm
+-- parseIf = do
+--   _ <- string "if"
+--   spaces
+--   cond <- parseBexp
+--   spaces
+--   _ <- string "then"
+--   spaces
+--   thenStm <- parseStmt
+--   spaces
+--   _ <- string "else"
+--   spaces
+--   elseStm <- parseStmt
+--   _ <- char ';'
+--   return $ If cond thenStm elseStm
+
+-- -- Parse while loop statement
+-- parseWhile :: Parser Stm
+-- parseWhile = do
+--   _ <- string "while"
+--   spaces
+--   cond <- parseBexp
+--   spaces
+--   body <- parseStmt
+--   _ <- char ';'
+--   return $ While cond body
+
+-- -- Parse any statement
+-- parseStmt :: Parser Stm
+-- parseStmt = try parseAssign <|> try parseSeq <|> try parseIf <|> try parseWhile
+
+-- -- Parse the entire program
+-- parseProgram :: Parser Program
+-- parseProgram = endBy parseStmt spaces
 
 -- To help you test your parser
 -- testParser :: String -> (String, String)
