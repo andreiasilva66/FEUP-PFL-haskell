@@ -1,4 +1,4 @@
-import Data.List (intercalate)
+import Data.List (intercalate, sortOn)
 import Stack
 
 data Inst =
@@ -17,17 +17,24 @@ createEmptyStack = empty
 stack2Str :: Stack -> String
 stack2Str s
   | isEmpty s = ""
-  | otherwise = show (top s) ++ if isEmpty (pop s) then "" else "," ++ stack2Str (pop s)
+  | otherwise = case top s of
+                  IntElem x  -> show x
+                  BoolElem b -> show b
+                ++ if isEmpty (pop s) then "" else "," ++ stack2Str (pop s)
 
 createEmptyState :: State
 createEmptyState = []
 
 state2Str :: State -> String
-state2Str state = intercalate "," (map element2Str state)
+state2Str state = intercalate "," (map element2Str (sortByName state))
   where
-    element2Str :: (String, StackElement) -> String
-    element2Str (name, element) = name ++ "=" ++ show element
+    sortByName :: State -> State
+    sortByName = sortOn fst
 
+    element2Str :: (String, StackElement) -> String
+    element2Str (name, element) = name ++ "=" ++ case element of
+                                                  IntElem x  -> show x
+                                                  BoolElem b -> show b
 
 -- vai buscar o int no topo da stack
 getInt :: Stack -> Integer
@@ -41,7 +48,6 @@ getBool :: Stack -> Bool
 getBool stack = case top stack of
   BoolElem x -> x
   _          -> error "getBool: expected a boolean on top of the stack"
-
 
 -- ve se sao iguais
 equal :: Stack -> Bool
@@ -64,9 +70,16 @@ fetch x state stack = case lookup x state of
 
 
 store :: String -> State -> Stack -> State
-store x st stack = case top stack of
-  IntElem val -> (x, IntElem (getInt stack)) : st
-  BoolElem val -> (x, BoolElem (getBool stack)) : st
+store x st stack =
+  case top stack of
+    IntElem val -> updateState (x, IntElem val) st
+    BoolElem val -> updateState (x, BoolElem val) st
+  where
+    updateState :: (String, StackElement) -> State -> State
+    updateState entry state =
+      case lookup (fst entry) state of
+        Just _  -> entry : filter (\(name, _) -> name /= fst entry) state
+        Nothing -> entry : state
 
 tt :: Bool
 tt = True
@@ -100,7 +113,15 @@ testAssembler code = (stack2Str stack, state2Str state)
 
 main :: IO ()
 main = do
-  print (testAssembler [Push 10,Push 4,Push 3,Sub,Mult])
+  print (testAssembler [Push 10,Push 4,Push 3,Sub,Mult] == ("-10",""))
+  print (testAssembler [Fals,Push 3,Tru,Store "var",Store "a", Store "someVar"] == ("","a=3,someVar=False,var=True"))
+  print (testAssembler [Fals,Store "var",Fetch "var"] == ("False","var=False"))
+  print (testAssembler [Push (-20),Tru,Fals] == ("False,True,-20",""))
+  print (testAssembler [Push (-20),Tru,Tru,Neg] == ("False,True,-20",""))
+  print (testAssembler [Push (-20),Tru,Tru,Neg,Equ] == ("False,-20",""))
+  print (testAssembler [Push (-20),Push (-21), Le] == ("True",""))
+  print (testAssembler [Push 5,Store "x",Push 1,Fetch "x",Sub,Store "x"] == ("","x=4"))
+  print (testAssembler [Push 10,Store "i",Push 1,Store "fact",Loop [Push 1,Fetch "i",Equ,Neg] [Fetch "i",Fetch "fact",Mult,Store "fact",Push 1,Fetch "i",Sub,Store "i"]])
 
 
 -- Examples:
