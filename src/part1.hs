@@ -40,21 +40,21 @@ state2Str state = intercalate "," (map element2Str (sortByName state))
 getInt :: Stack -> Integer
 getInt stack = case top stack of
   IntElem x -> x
-  _         -> error "getInt: expected an integer on top of the stack"
+  _         -> error $ "Run-time error" 
 
 
 -- vai buscar a bool no topo da stack
 getBool :: Stack -> Bool
 getBool stack = case top stack of
   BoolElem x -> x
-  _          -> error "getBool: expected a boolean on top of the stack"
+  _          -> error $ "Run-time error" 
 
 -- ve se sao iguais
 equal :: Stack -> Bool
 equal stack = case (top stack, top (pop stack)) of
   (IntElem x, IntElem y) -> x == y
   (BoolElem x, BoolElem y) -> x == y
-  _                      -> error "equal: expected two elements of the same type on top of the stack"
+  _                      -> error $ "Run-time error" 
 
 
 -- ve se e menor ou igual
@@ -66,7 +66,7 @@ lessEqual x y = x <= y
 fetch :: String -> State -> Stack -> Stack
 fetch x state stack = case lookup x state of
   Just x -> push x stack
-  Nothing -> error "fetch: variable not found"
+  Nothing -> error $ "Run-time error" 
 
 
 store :: String -> State -> Stack -> State
@@ -101,8 +101,10 @@ run ( And :rest, stack, state) = run (rest, push (BoolElem (getBool stack && get
 run ( Neg :rest , stack, state) = run (rest , push (BoolElem (not (getBool stack))) (pop stack), state)
 run ( Fetch x :rest, stack, state) = run (rest, fetch x state stack, state)
 run ( Store x :rest, stack, state) = run (rest, pop stack, store x state stack)
-run ( Branch c1 c2 :rest, stack, state) = run(if getBool stack then run(c1,stack,state) else run(c2,stack,state))
-run ( Loop c1 c2 :rest, stack, state) = run(c1,stack,state)
+run (Branch c1 c2: code,(BoolElem boole:stackRest),state)
+                                                    | boole == True = run (c1 ++ code,stackRest,state)
+                                                    | otherwise = run (c2 ++ code,stackRest,state)
+run (Loop c1 c2: code,stack,state) = run ((c1 ++ [Branch (c2 ++ [Loop c1 c2]) [Noop]]) ++ code,stack,state)
 run ( Noop :rest, stack, state) = run (rest, stack, state)
 
 
@@ -113,15 +115,7 @@ testAssembler code = (stack2Str stack, state2Str state)
 
 main :: IO ()
 main = do
-  print (testAssembler [Push 10,Push 4,Push 3,Sub,Mult] == ("-10",""))
-  print (testAssembler [Fals,Push 3,Tru,Store "var",Store "a", Store "someVar"] == ("","a=3,someVar=False,var=True"))
-  print (testAssembler [Fals,Store "var",Fetch "var"] == ("False","var=False"))
-  print (testAssembler [Push (-20),Tru,Fals] == ("False,True,-20",""))
-  print (testAssembler [Push (-20),Tru,Tru,Neg] == ("False,True,-20",""))
-  print (testAssembler [Push (-20),Tru,Tru,Neg,Equ] == ("False,-20",""))
-  print (testAssembler [Push (-20),Push (-21), Le] == ("True",""))
-  print (testAssembler [Push 5,Store "x",Push 1,Fetch "x",Sub,Store "x"] == ("","x=4"))
-  print (testAssembler [Push 10,Store "i",Push 1,Store "fact",Loop [Push 1,Fetch "i",Equ,Neg] [Fetch "i",Fetch "fact",Mult,Store "fact",Push 1,Fetch "i",Sub,Store "i"]])
+  print(testAssembler [Tru,Tru,Store "y", Fetch "x",Tru])
 
 
 -- Examples:
