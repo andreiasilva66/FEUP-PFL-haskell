@@ -306,4 +306,4 @@ testParser programCode = (stack2Str stack, state2Str state)
 
 main :: IO ()
 main = do
-  print(lexer "x := 55; (x := x) - 1 and 3;")
+  print(testParser "x := 5; x := x - 1;" == ("","x=4"))
