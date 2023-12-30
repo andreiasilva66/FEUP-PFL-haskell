@@ -195,10 +195,6 @@ lexer (c:cs)
     let (word, rest) = span (\x -> not (isSpace x) && x `notElem` [';', '(', ')']) (c:cs)
      in word : lexer rest
 
--- Helper function to skip spaces
-skipSpaces :: String -> String
-skipSpaces = dropWhile (\c -> isSpace c || c == ';')
-
 -- Parser for integers
 parseInt :: String -> (Integer, String)
 parseInt s = (read numStr, rest)
@@ -206,75 +202,76 @@ parseInt s = (read numStr, rest)
     (numStr, rest) = span isDigit s
 
 -- Parser for variable names
-parseVar :: String -> (String, String)
-parseVar s = span isAlpha s
+parseVar :: [String] -> (String, [String])
+parseVar (c:cs) | all isAlpha c = (c, cs)
+                | otherwise = error "Invalid variable name"
+parseVar [] = error "Unexpected end of input"
 
 -- Parser for arithmetic expressions
-parseAexp :: String -> (Aexp, String)
-parseAexp s = case skipSpaces s of
-  ('(':rest) -> parseAexpInParens rest
-  (c:rest) 
-    | isDigit c -> let (num, rest') = parseInt s in (Num num, rest')
-    | isAlpha c -> let (var, rest') = parseVar s in (Var var, rest')
-  _ -> error "Invalid arithmetic expression"
+parseAexp :: [String] -> (Aexp, [String])
+parseAexp ("(":rest) = parseAexpInParens rest
+parseAexp (c:rest)
+  | all isDigit c = (Num (read c), rest)
+  | all isAlpha c = (Var c, rest)
+  | otherwise = error "Invalid arithmetic expression"
+parseAexp _ = error "Invalid arithmetic expression"
 
-parseAexpInParens :: String -> (Aexp, String)
+parseAexpInParens :: [String] -> (Aexp, [String])
 parseAexpInParens s = case parseAexp s of
-  (aexp, ')':rest) -> (aexp, rest)
+  (aexp, ")":rest) -> (aexp, rest)
   _ -> error "Mismatched parentheses in arithmetic expression"
 
 -- Parser for boolean expressions
-parseBexp :: String -> (Bexp, String)
-parseBexp s = case skipSpaces s of
-  "True" -> (BTrue, drop 4 s)
-  "False" -> (BFalse, drop 5 s)
-  ('n':'o':'t':rest) -> case parseBexp rest of
-    (bexp, after) -> (Not bexp, after)
-  ('(':rest) -> parseBexpInParens rest
-  _ -> error "Invalid boolean expression"
+parseBexp :: [String] -> (Bexp, [String])
+parseBexp ("True":rest) = (BTrue, rest)
+parseBexp ("False":rest) = (BFalse, rest)
+parseBexp ("not":rest) = case parseBexp rest of
+  (bexp, after) -> (Not bexp, after)
+parseBexp ("(":rest) = parseBexpInParens rest
+parseBexp _ = error "Invalid boolean expression"
 
-parseBexpInParens :: String -> (Bexp, String)
+parseBexpInParens :: [String] -> (Bexp, [String])
 parseBexpInParens s = case parseBexp s of
-  (bexp, ')':rest) -> (bexp, rest)
+  (bexp, ")":rest) -> (bexp, rest)
   _ -> error "Mismatched parentheses in boolean expression"
 
 -- Parser for statements
-parseStm :: String -> (Stm, String)
-parseStm s = case skipSpaces s of
-  ('i':'f':rest) -> parseIf rest
-  ('w':'h':'i':'l':'e':rest) -> parseWhile rest
-  _ -> parseAssignment s
+parseStm :: [String] -> (Stm, [String])
+parseStm ("if":rest) = parseIf rest
+parseStm ("while":rest) = parseWhile rest
+parseStm (var:":=":rest) = case parseAexp rest of
+  (expr, after) -> (Assign var expr, after)
+parseStm _ = error "Invalid statement"
 
 -- Parser for assignment statements
-parseAssignment :: String -> (Stm, String)
+parseAssignment :: [String] -> (Stm, [String])
 parseAssignment s = case parseVar s of
-  (var, rest) ->
-    case skipSpaces rest of
-      (':':'=':rest') ->
-        case parseAexp rest' of
-          (expr, after) -> (Assign var expr, after)
-      _ -> error "Invalid assignment statement"
+  (var, ":=":rest) ->
+    case parseAexp rest of
+      (expr, after) -> (Assign var expr, after)
+  _ -> error "Invalid assignment statement"
 
-parseSequence :: String -> ([Stm], String)
+parseSequence :: [String] -> ([Stm], [String])
 parseSequence s = case parseStm s of
-  (stmt, rest) -> case skipSpaces rest of
-    (';' : rest') -> case parseSequence rest' of
+  (stmt, rest) -> case rest of
+    (";":rest') -> case parseSequence rest' of
       (stmts, rest'') -> (stmt : stmts, rest'')
     _ -> ([stmt], rest)
 
-parseIf :: String -> (Stm, String)
+parseIf :: [String] -> (Stm, [String])
 parseIf s =
   case parseBexp s of
     (cond, rest) ->
       case parseStm rest of
         (thenBranch, rest') ->
-          case skipSpaces rest' of
-            ('e':'l':'s':'e':rest'') ->
+          case rest' of
+            ("else":rest'') ->
               case parseStm rest'' of
                 (elseBranch, rest''') -> (If cond [thenBranch] [elseBranch], rest''')
             _ -> error "Invalid if-then-else statement"
+        -- _ -> error "Invalid if-then-else statement"
 
-parseWhile :: String -> (Stm, String)
+parseWhile :: [String] -> (Stm, [String])
 parseWhile s =
   case parseBexp s of
     (cond, rest) ->
@@ -282,21 +279,21 @@ parseWhile s =
         (body, rest') -> (While cond [body], rest')
 
 -- Parser for the entire program
-parseProgram :: String -> (Program, String)
+parseProgram :: [String] -> (Program, [String])
 parseProgram s = parseSequence s
 
 parse :: String -> Program
 parse input =
-  case parseProgram input of
+  case parseProgram (lexer input) of
     (program, remaining) ->
       if null remaining
         then program
-        else error $ "Parsing error. Remaining input: " ++ remaining
+        else error $ "Parsing error. Remaining input: " ++ unwords remaining
 
 -- To help you test your parser
 testParser :: String -> (String, String)
 testParser programCode = (stack2Str stack, state2Str state)
-  where (_,stack,state) = run(compile (parse programCode), createEmptyStack, createEmptyState)
+  where (_, stack, state) = run (compile (parse programCode), createEmptyStack, createEmptyState)
 
 -- Examples:
 -- testParser "x := 5; x := x - 1;" == ("","x=4")
