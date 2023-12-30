@@ -134,7 +134,6 @@ testAssembler code = (stack2Str stack, state2Str state)
 
 -- Part 2
 
--- TODO: Define the types Aexp, Bexp, Stm and Program
 data Aexp
   = Var String            -- Variable
   | Num Integer           -- Integer literal
@@ -184,13 +183,21 @@ compile (stmt:rest) = case stmt of
   While cond body -> [Loop (compB cond) (compile body)] ++ compile rest
 
 
--- Lexer
 lexer :: String -> [String]
-lexer = words
+lexer [] = []
+lexer (c:cs)
+  | isDigit c =
+    let (num, rest) = span isDigit (c:cs)
+     in num : lexer rest
+  | c == ';' || c == '(' || c == ')' = [c] : lexer cs
+  | isSpace c = lexer cs
+  | otherwise =
+    let (word, rest) = span (\x -> not (isSpace x) && x `notElem` [';', '(', ')']) (c:cs)
+     in word : lexer rest
 
 -- Helper function to skip spaces
 skipSpaces :: String -> String
-skipSpaces = dropWhile isSpace
+skipSpaces = dropWhile (\c -> isSpace c || c == ';')
 
 -- Parser for integers
 parseInt :: String -> (Integer, String)
@@ -221,7 +228,7 @@ parseBexp :: String -> (Bexp, String)
 parseBexp s = case skipSpaces s of
   "True" -> (BTrue, drop 4 s)
   "False" -> (BFalse, drop 5 s)
-  ('!':rest) -> case parseBexp rest of
+  ('n':'o':'t':rest) -> case parseBexp rest of
     (bexp, after) -> (Not bexp, after)
   ('(':rest) -> parseBexpInParens rest
   _ -> error "Invalid boolean expression"
@@ -238,11 +245,12 @@ parseStm s = case skipSpaces s of
   ('w':'h':'i':'l':'e':rest) -> parseWhile rest
   _ -> parseAssignment s
 
+-- Parser for assignment statements
 parseAssignment :: String -> (Stm, String)
 parseAssignment s = case parseVar s of
   (var, rest) ->
     case skipSpaces rest of
-      ('=':rest') ->
+      (':':'=':rest') ->
         case parseAexp rest' of
           (expr, after) -> (Assign var expr, after)
       _ -> error "Invalid assignment statement"
@@ -301,4 +309,4 @@ testParser programCode = (stack2Str stack, state2Str state)
 
 main :: IO ()
 main = do
-  print(testParser "x := 5; x := x - 1;" == ("","x=4"))
+  print(lexer "x := 55; (x := x) - 1 and 3;")
