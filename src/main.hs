@@ -1,8 +1,7 @@
 import Data.List (intercalate, sortOn)
 import Stack
 import Data.Char
--- import Text.Parsec hiding (State)
--- import Text.Parsec.String (Parser)
+import Debug.Trace
 
 data Inst =
   Push Integer | Add | Mult | Sub | Tru | Fals | Equ | Le | And | Neg | Fetch String | Store String | Noop |
@@ -184,16 +183,35 @@ compile (stmt:rest) = case stmt of
 
 
 lexer :: String -> [String]
-lexer [] = []
-lexer (c:cs)
-  | isDigit c =
-    let (num, rest) = span isDigit (c:cs)
-     in num : lexer rest
-  | c == ';' || c == '(' || c == ')' = [c] : lexer cs
-  | isSpace c = lexer cs
-  | otherwise =
-    let (word, rest) = span (\x -> not (isSpace x) && x `notElem` [';', '(', ')']) (c:cs)
-     in word : lexer rest
+lexer "" = []
+lexer ('w':'h':'i':'l':'e':rest) = "while" : lexer rest
+lexer ('i':'f':rest) = "if" : lexer rest
+lexer ('t':'h':'e':'n':rest) = "then" : lexer rest
+lexer ('e':'l':'s':'e':rest) = "else" : lexer rest
+lexer ('*':rest) = "*" : lexer rest
+lexer ('+':rest) = "+" : lexer rest
+lexer ('/':rest) = "/" : lexer rest
+lexer ('-':rest) = "-" : lexer rest
+lexer (';':rest) = ";" : lexer rest
+lexer ('(':rest) = "(" : lexer rest
+lexer (')':rest) = ")" : lexer rest
+lexer ('<':'=':rest) = "<=" : lexer rest
+lexer ('=':'=':rest) = "==" : lexer rest
+lexer ('n':'o':'t':rest) = "not" : lexer rest
+lexer ('=':rest) = "=" : lexer rest
+lexer ('a':'n':'d':rest) = "and" : lexer rest
+lexer (':':'=':rest) = ":=" : lexer rest
+lexer ('d':'o':rest) = "do" : lexer rest
+lexer (' ':rest) = lexer rest
+lexer (a:rest) = lexeracc (a:rest) []
+
+lexeracc :: String -> String -> [String]
+lexeracc "" stracc | stracc == "" = []
+                   | otherwise = [stracc]
+lexeracc (' ':rest) stracc | stracc == "" = lexer rest
+                          | otherwise = stracc : lexer rest
+lexeracc (a:rest) stracc = lexeracc rest (stracc ++ [a])
+
 
 -- Parser for integers
 parseInt :: String -> (Integer, String)
@@ -209,16 +227,18 @@ parseVar [] = error "Unexpected end of input"
 
 -- Parser for arithmetic expressions
 parseAexp :: [String] -> (Aexp, [String])
-parseAexp ("(":rest) = parseAexpInParens rest
+parseAexp ("(":rest) = trace ("Parsing in parentheses: " ++ show rest) (parseAexpInParens rest)
 parseAexp (c:rest)
-  | all isDigit c = (Num (read c), rest)
-  | all isAlpha c = (Var c, rest)
+  | all isDigit c = trace ("Parsed Num: " ++ show (read c :: Integer)) (Num (read c), rest)
+  | all isAlpha c = trace ("Parsed Var: " ++ c) (Var c, rest)
+  | c == "-" = case parseAexp rest of
+                 (a1, rest') -> trace ("Parsed Unary Minus: " ++ show (ASub (Num 0) a1)) (ASub (Num 0) a1, rest')
   | otherwise = error "Invalid arithmetic expression"
 parseAexp _ = error "Invalid arithmetic expression"
 
 parseAexpInParens :: [String] -> (Aexp, [String])
 parseAexpInParens s = case parseAexp s of
-  (aexp, ")":rest) -> (aexp, rest)
+  (aexp, rest) -> trace ("Parsed expression in parentheses: " ++ show aexp) (aexp, rest)
   _ -> error "Mismatched parentheses in arithmetic expression"
 
 -- Parser for boolean expressions
@@ -279,12 +299,12 @@ parseWhile s =
         (body, rest') -> (While cond [body], rest')
 
 -- Parser for the entire program
-parseProgram :: [String] -> (Program, [String])
-parseProgram s = parseSequence s
+-- parseProgram :: [String] -> (Program, [String])
+-- parseProgram s = parseSequence s
 
 parse :: String -> Program
 parse input =
-  case parseProgram (lexer input) of
+  case parseSequence (lexer input) of
     (program, remaining) ->
       if null remaining
         then program
@@ -306,4 +326,9 @@ testParser programCode = (stack2Str stack, state2Str state)
 
 main :: IO ()
 main = do
-  print(testParser "x := 5; x := x - 1;" == ("","x=4"))
+  let input1 = ["if", "True", "then", "x", ":=", "42", "else", "x", ":=", "10", ";"]
+  let (parsedStm1, remaining1) = parseStm input1
+  putStrLn "Test Case 1:"
+  putStrLn $ "Parsed Statement: " ++ show parsedStm1
+  putStrLn $ "Remaining Input: " ++ unwords remaining1
+  putStrLn ""
