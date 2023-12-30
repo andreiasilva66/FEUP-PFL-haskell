@@ -1,7 +1,8 @@
 import Data.List (intercalate, sortOn)
 import Stack
-import Text.Parsec hiding (State)
-import Text.Parsec.String (Parser)
+import Data.Char
+-- import Text.Parsec hiding (State)
+-- import Text.Parsec.String (Parser)
 
 data Inst =
   Push Integer | Add | Mult | Sub | Tru | Fals | Equ | Le | And | Neg | Fetch String | Store String | Noop |
@@ -114,11 +115,6 @@ testAssembler :: Code -> (String, String)
 testAssembler code = (stack2Str stack, state2Str state)
   where (_,stack,state) = run(code, createEmptyStack, createEmptyState)
 
-
-main :: IO ()
-main = do
-  print(testAssembler [Push 10,Push 4,Push 3,Sub,Mult] == ("-10",""))
-
 -- Examples:
 -- testAssembler [Push 10,Push 4,Push 3,Sub,Mult] == ("-10","")
 -- testAssembler [Fals,Push 3,Tru,Store "var",Store "a", Store "someVar"] == ("","a=3,someVar=False,var=True")
@@ -151,14 +147,15 @@ data Bexp
   = BTrue                 -- True constant
   | BFalse                -- False constant
   | Eq Aexp Aexp          -- Equality
+  | BLe Aexp Aexp          -- Less than or equal to
   | Not Bexp              -- Logical negation
   deriving Show
 
 data Stm
   = Assign String Aexp    -- Assignment
-  | Seq Stm Stm           -- Sequence of statements
-  | If Bexp Stm Stm       -- If-then-else statement
-  | While Bexp Stm        -- While loop
+  | Seq [Stm]             -- Sequence of statements
+  | If Bexp [Stm] [Stm]   -- If-then-else statement
+  | While Bexp [Stm]      -- While loop
   deriving Show
 
 type Program = [Stm]
@@ -168,124 +165,130 @@ compA :: Aexp -> Code
 compA (Var x) = [Fetch x]
 compA (Num n) = [Push n]
 compA (AAdd a1 a2) = compA a1 ++ compA a2 ++ [Add]
-compA (ASub a1 a2) = compA a1 ++ compA a2 ++ [Sub]
+compA (ASub a1 a2) = compA a2 ++ compA a1 ++ [Sub]
 compA (AMul a1 a2) = compA a1 ++ compA a2 ++ [Mult]
 
 compB :: Bexp -> Code
 compB BTrue = [Tru]
 compB BFalse = [Fals]
 compB (Eq a1 a2) = compA a1 ++ compA a2 ++ [Equ]
+compB (BLe a1 a2) = compA a2 ++ compA a1 ++ [Le]
 compB (Not b) = compB b ++ [Neg]
 
 compile :: Program -> Code
 compile [] = []
 compile (stmt:rest) = case stmt of
   Assign var expr -> compA expr ++ [Store var] ++ compile rest
-  Seq s1 s2 -> compile [s1] ++ compile [s2] ++ compile rest
-  If cond thenStm elseStm -> compB cond ++ [Branch (compile [thenStm]) (compile [elseStm])] ++ compile rest
-  While cond body -> [Loop (compB cond) (compile [body])] ++ compile rest
+  Seq s1 -> compile s1 ++ compile rest
+  If cond thenStm elseStm -> compB cond ++ [Branch (compile thenStm) (compile elseStm)] ++ compile rest
+  While cond body -> [Loop (compB cond) (compile body)] ++ compile rest
 
 
--- -- Lexer
--- lexer :: Parser [String]
--- lexer = sepBy (many1 (alphaNum <|> oneOf "+-*/=<>!&|")) spaces
+-- Lexer
+lexer :: String -> [String]
+lexer = words
 
--- -- Parse arithmetic expression
--- parseAexp :: Parser Aexp
--- parseAexp = do
---   tokens <- lexer
---   return $ buildAexp tokens
+-- Helper function to skip spaces
+skipSpaces :: String -> String
+skipSpaces = dropWhile isSpace
 
--- buildAexp :: [String] -> Aexp
--- buildAexp [var] = Var var
--- buildAexp [num] = Num (read num)
--- buildAexp (op : tokens)
---   | op `elem` ["+", "-", "*"] =
---     let (left, right) = splitAt (length tokens `div` 2) tokens
---      in case op of
---           "+" -> AAdd (buildAexp left) (buildAexp right)
---           "-" -> ASub (buildAexp left) (buildAexp right)
---           "*" -> AMul (buildAexp left) (buildAexp right)
---   | otherwise = error "Invalid arithmetic expression"
+-- Parser for integers
+parseInt :: String -> (Integer, String)
+parseInt s = (read numStr, rest)
+  where
+    (numStr, rest) = span isDigit s
 
--- -- Parse boolean expression
--- parseBexp :: Parser Bexp
--- parseBexp = do
---   tokens <- lexer
---   return $ buildBexp tokens
+-- Parser for variable names
+parseVar :: String -> (String, String)
+parseVar s = span isAlpha s
 
--- buildBexp :: [String] -> Bexp
--- buildBexp ["true"] = BTrue
--- buildBexp ["false"] = BFalse
--- buildBexp [var] = Var var
--- buildBexp [num] = Num (read num)
--- buildBexp ["not", rest] = Not (buildBexp [rest])
--- buildBexp (op : tokens)
---   | op `elem` ["==", "<=", "&&"] =
---     let (left, right) = splitAt (length tokens `div` 2) tokens
---      in case op of
---           "==" -> Eq (buildAexp left) (buildAexp right)
---           "<=" -> Le (buildAexp left) (buildAexp right)
---           "&&" -> And (buildBexp left) (buildBexp right)
---   | otherwise = error "Invalid boolean expression"
+-- Parser for arithmetic expressions
+parseAexp :: String -> (Aexp, String)
+parseAexp s = case skipSpaces s of
+  ('(':rest) -> parseAexpInParens rest
+  (c:rest) 
+    | isDigit c -> let (num, rest') = parseInt s in (Num num, rest')
+    | isAlpha c -> let (var, rest') = parseVar s in (Var var, rest')
+  _ -> error "Invalid arithmetic expression"
 
--- -- Parse assignment statement
--- parseAssign :: Parser Stm
--- parseAssign = do
---   var <- many1 lower
---   spaces
---   _ <- char '='
---   spaces
---   expr <- lexer
---   _ <- char ';'
---   return $ Assign var (buildAexp expr)
+parseAexpInParens :: String -> (Aexp, String)
+parseAexpInParens s = case parseAexp s of
+  (aexp, ')':rest) -> (aexp, rest)
+  _ -> error "Mismatched parentheses in arithmetic expression"
 
--- -- Parse sequence of statements
--- parseSeq :: Parser Stm
--- parseSeq = do
---   stmts <- sepBy1 parseStmt (char ';')
---   return $ foldr1 Seq stmts
+-- Parser for boolean expressions
+parseBexp :: String -> (Bexp, String)
+parseBexp s = case skipSpaces s of
+  "True" -> (BTrue, drop 4 s)
+  "False" -> (BFalse, drop 5 s)
+  ('!':rest) -> case parseBexp rest of
+    (bexp, after) -> (Not bexp, after)
+  ('(':rest) -> parseBexpInParens rest
+  _ -> error "Invalid boolean expression"
 
--- -- Parse if-then-else statement
--- parseIf :: Parser Stm
--- parseIf = do
---   _ <- string "if"
---   spaces
---   cond <- parseBexp
---   spaces
---   _ <- string "then"
---   spaces
---   thenStm <- parseStmt
---   spaces
---   _ <- string "else"
---   spaces
---   elseStm <- parseStmt
---   _ <- char ';'
---   return $ If cond thenStm elseStm
+parseBexpInParens :: String -> (Bexp, String)
+parseBexpInParens s = case parseBexp s of
+  (bexp, ')':rest) -> (bexp, rest)
+  _ -> error "Mismatched parentheses in boolean expression"
 
--- -- Parse while loop statement
--- parseWhile :: Parser Stm
--- parseWhile = do
---   _ <- string "while"
---   spaces
---   cond <- parseBexp
---   spaces
---   body <- parseStmt
---   _ <- char ';'
---   return $ While cond body
+-- Parser for statements
+parseStm :: String -> (Stm, String)
+parseStm s = case skipSpaces s of
+  ('i':'f':rest) -> parseIf rest
+  ('w':'h':'i':'l':'e':rest) -> parseWhile rest
+  _ -> parseAssignment s
 
--- -- Parse any statement
--- parseStmt :: Parser Stm
--- parseStmt = try parseAssign <|> try parseSeq <|> try parseIf <|> try parseWhile
+parseAssignment :: String -> (Stm, String)
+parseAssignment s = case parseVar s of
+  (var, rest) ->
+    case skipSpaces rest of
+      ('=':rest') ->
+        case parseAexp rest' of
+          (expr, after) -> (Assign var expr, after)
+      _ -> error "Invalid assignment statement"
 
--- -- Parse the entire program
--- parseProgram :: Parser Program
--- parseProgram = endBy parseStmt spaces
+parseSequence :: String -> ([Stm], String)
+parseSequence s = case parseStm s of
+  (stmt, rest) -> case skipSpaces rest of
+    (';' : rest') -> case parseSequence rest' of
+      (stmts, rest'') -> (stmt : stmts, rest'')
+    _ -> ([stmt], rest)
+
+parseIf :: String -> (Stm, String)
+parseIf s =
+  case parseBexp s of
+    (cond, rest) ->
+      case parseStm rest of
+        (thenBranch, rest') ->
+          case skipSpaces rest' of
+            ('e':'l':'s':'e':rest'') ->
+              case parseStm rest'' of
+                (elseBranch, rest''') -> (If cond [thenBranch] [elseBranch], rest''')
+            _ -> error "Invalid if-then-else statement"
+
+parseWhile :: String -> (Stm, String)
+parseWhile s =
+  case parseBexp s of
+    (cond, rest) ->
+      case parseStm rest of
+        (body, rest') -> (While cond [body], rest')
+
+-- Parser for the entire program
+parseProgram :: String -> (Program, String)
+parseProgram s = parseSequence s
+
+parse :: String -> Program
+parse input =
+  case parseProgram input of
+    (program, remaining) ->
+      if null remaining
+        then program
+        else error $ "Parsing error. Remaining input: " ++ remaining
 
 -- To help you test your parser
--- testParser :: String -> (String, String)
--- testParser programCode = (stack2Str stack, store2Str store)
---   where (_,stack,store) = run(compile (parse programCode), createEmptyStack, createEmptyStore)
+testParser :: String -> (String, String)
+testParser programCode = (stack2Str stack, state2Str state)
+  where (_,stack,state) = run(compile (parse programCode), createEmptyStack, createEmptyState)
 
 -- Examples:
 -- testParser "x := 5; x := x - 1;" == ("","x=4")
@@ -295,3 +298,7 @@ compile (stmt:rest) = case stmt of
 -- testParser "x := 42; if x <= 43 then x := 1; else x := 33; x := x+1; z := x+x;" == ("","x=2,z=4")
 -- testParser "x := 2; y := (x - 3)*(4 + 2*3); z := x +x*(2);" == ("","x=2,y=-10,z=6")
 -- testParser "i := 10; fact := 1; while (not(i == 1)) do (fact := fact * i; i := i - 1;);" == ("","fact=3628800,i=1")
+
+main :: IO ()
+main = do
+  print(testParser "x := 5; x := x - 1;" == ("","x=4"))
