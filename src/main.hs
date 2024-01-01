@@ -1,21 +1,26 @@
 import Data.List (intercalate, sortOn)
 import Stack
 import Data.Char
-import Debug.Trace
 
+-- Define a data type 'Inst' representing instructions that can be executed.
+-- Each constructor corresponds to a specific operation or control flow instruction.
 data Inst =
   Push Integer | Add | Mult | Sub | Tru | Fals | Equ | Le | And | Neg | Fetch String | Store String | Noop |
   Branch Code Code | Loop Code Code
   deriving Show
+
+-- Define a type synonym 'Code' representing a list of instructions.
 type Code = [Inst]
 
+-- Define a type synonym 'State' representing the state of the program.
+-- Strings are used to represent variable names and StackElements are used to represent variable values.
 type State = [(String, StackElement)]
 
-
-
-createEmptyStack :: Stack 
+-- Function to create an empty stack.
+createEmptyStack :: Stack
 createEmptyStack = empty
 
+-- Function to convert a stack to a string for display purposes.
 stack2Str :: Stack -> String
 stack2Str s
   | isEmpty s = ""
@@ -24,92 +29,88 @@ stack2Str s
                   BoolElem b -> show b
                 ++ if isEmpty (pop s) then "" else "," ++ stack2Str (pop s)
 
+-- Function to create an empty state (list of variable bindings).
 createEmptyState :: State
 createEmptyState = []
 
+-- Function to convert a state to a string for display purposes.
 state2Str :: State -> String
 state2Str state = intercalate "," (map element2Str (sortByName state))
   where
+    -- Helper function to sort the state by variable names.
     sortByName :: State -> State
     sortByName = sortOn fst
 
+    -- Helper function to convert a variable value to a string.
     element2Str :: (String, StackElement) -> String
     element2Str (name, element) = name ++ "=" ++ case element of
                                                   IntElem x  -> show x
                                                   BoolElem b -> show b
 
--- vai buscar o int no topo da stack
-getInt :: Stack -> Integer
-getInt stack = case top stack of
-  IntElem x -> x
-  _         -> error $ "Run-time error" 
-
-
--- vai buscar a bool no topo da stack
-getBool :: Stack -> Bool
-getBool stack = case top stack of
-  BoolElem x -> x
-  _          -> error $ "Run-time error" 
-
--- ve se sao iguais
+-- Function to check if the top two elements on the stack are equal.
+-- Throws a runtime error if the types do not match.
 equal :: Stack -> Bool
 equal stack = case (top stack, top (pop stack)) of
   (IntElem x, IntElem y) -> x == y
   (BoolElem x, BoolElem y) -> x == y
-  _                      -> error $ "Run-time error" 
+  _ -> error $ "Run-time error"
 
-
--- ve se e menor ou igual
+-- Function to check if one Integer is less than or equal to another.
 lessEqual :: Integer -> Integer -> Bool
 lessEqual x y = x <= y
 
-
--- 
+-- Function to fetch a variable from the state and push its value onto the stack.
+-- Throws a runtime error if the variable is not found in the state.
 fetch :: String -> State -> Stack -> Stack
 fetch x state stack = case lookup x state of
-  Just x -> push x stack
-  Nothing -> error $ "Run-time error" 
+  Just val -> push val stack
+  Nothing  -> error $ "Run-time error"
 
-
+-- Function to store the top element of the stack in the state as a variable.
+-- Throws a runtime error if the top of the stack is not an IntElem or BoolElem.
 store :: String -> State -> Stack -> State
-store x st stack =
+store x state stack =
   case top stack of
-    IntElem val -> updateState (x, IntElem val) st
-    BoolElem val -> updateState (x, BoolElem val) st
+    IntElem val  -> updateState (x, IntElem val) state
+    BoolElem val -> updateState (x, BoolElem val) state
   where
+    -- Helper function to update the state with a new variable binding.
     updateState :: (String, StackElement) -> State -> State
     updateState entry state =
       case lookup (fst entry) state of
         Just _  -> entry : filter (\(name, _) -> name /= fst entry) state
         Nothing -> entry : state
 
-tt :: Bool
-tt = True
+-- -- Constants representing True and False as BoolElems.
+-- tt :: Bool
+-- tt = True
 
-ff :: Bool
-ff = False
+-- ff :: Bool
+-- ff = False
 
+-- Function to execute a list of instructions (Code) given the current stack and state.
+-- Returns a tuple containing the remaining instructions, the updated stack, and the updated state.
 run :: (Code, Stack, State) -> (Code, Stack, State)
-run ([], stack, states) = ([], stack, states)
-run ( Add :rest, stack, state) = run (rest, push (IntElem (getInt stack + getInt (pop stack))) (pop (pop stack)), state)
-run ( Mult :rest, stack, state) = run (rest, push (IntElem (getInt stack * getInt (pop stack))) (pop (pop stack)), state)
-run ( Sub :rest, stack, state) = run (rest, push (IntElem (getInt stack - getInt (pop stack))) (pop (pop stack)), state)
-run ( Tru :rest, stack, state) = run (rest, push (BoolElem tt) stack, state)
-run ( Fals :rest, stack, state) = run (rest, push (BoolElem ff) stack, state)
-run ( Push x :rest, stack, state) = run (rest, push (IntElem x) stack, state)
-run ( Equ :rest, stack, state) = run (rest, push (BoolElem (equal stack)) (pop (pop stack)), state)
-run ( Le :rest, stack, state) = run (rest, push (BoolElem (lessEqual (getInt stack) (getInt (pop stack)))) (pop (pop stack)), state)
-run ( And :rest, stack, state) = run (rest, push (BoolElem (getBool stack && getBool (pop stack))) (pop (pop stack)), state)
-run ( Neg :rest , stack, state) = run (rest , push (BoolElem (not (getBool stack))) (pop stack), state)
-run ( Fetch x :rest, stack, state) = run (rest, fetch x state stack, state)
-run ( Store x :rest, stack, state) = run (rest, pop stack, store x state stack)
-run (Branch c1 c2: code,(BoolElem boole:stackRest),state)
-                                                    | boole == True = run (c1 ++ code,stackRest,state)
-                                                    | otherwise = run (c2 ++ code,stackRest,state)
-run (Loop c1 c2: code,stack,state) = run ((c1 ++ [Branch (c2 ++ [Loop c1 c2]) [Noop]]) ++ code,stack,state)
-run ( Noop :rest, stack, state) = run (rest, stack, state)
+run ([], stack, states) = ([], stack, states)  -- Base case: No more instructions to execute.
+run (Add:rest, stack, state) = run (rest, push (IntElem (getInt stack + getInt (pop stack))) (pop (pop stack)), state)
+run (Mult:rest, stack, state) = run (rest, push (IntElem (getInt stack * getInt (pop stack))) (pop (pop stack)), state)
+run (Sub:rest, stack, state) = run (rest, push (IntElem (getInt stack - getInt (pop stack))) (pop (pop stack)), state)
+run (Tru:rest, stack, state) = run (rest, push (BoolElem tt) stack, state)
+run (Fals:rest, stack, state) = run (rest, push (BoolElem ff) stack, state)
+run (Push x:rest, stack, state) = run (rest, push (IntElem x) stack, state)
+run (Equ:rest, stack, state) = run (rest, push (BoolElem (equal stack)) (pop (pop stack)), state)
+run (Le:rest, stack, state) = run (rest, push (BoolElem (lessEqual (getInt stack) (getInt (pop stack)))) (pop (pop stack)), state)
+run (And:rest, stack, state) = run (rest, push (BoolElem (getBool stack && getBool (pop stack))) (pop (pop stack)), state)
+run (Neg:rest, stack, state) = run (rest, push (BoolElem (not (getBool stack))) (pop stack), state)
+run (Fetch x:rest, stack, state) = run (rest, fetch x state stack, state)
+run (Store x:rest, stack, state) = run (rest, pop stack, store x state stack)
+run (Branch c1 c2:code, BoolElem boole:stackRest, state)
+  | boole == True = run (c1 ++ code, stackRest, state)  -- Branch if the condition is True.
+  | otherwise = run (c2 ++ code, stackRest, state)      -- Branch if the condition is False.
+run (Loop c1 c2:code, stack, state) = run ((c1 ++ [Branch (c2 ++ [Loop c1 c2]) [Noop]]) ++ code, stack, state)
+run (Noop:rest, stack, state) = run (rest, stack, state)  -- No operation, continue with the next instruction.
 
-
+-- Function given to help to test the assembler.
 testAssembler :: Code -> (String, String)
 testAssembler code = (stack2Str stack, state2Str state)
   where (_,stack,state) = run(code, createEmptyStack, createEmptyState)
@@ -147,6 +148,7 @@ data Bexp
   | Eq Aexp Aexp          -- Equality
   | BLe Aexp Aexp          -- Less than or equal to
   | Not Bexp              -- Logical negation
+  | And Bexp Bexp         -- Logical and
   deriving Show
 
 data Stm
@@ -159,58 +161,65 @@ data Stm
 type Program = [Stm]
 
 -- Compiler functions
+
+-- Function to compile arithmetic expressions (Aexp) into stack machine code (Code).
 compA :: Aexp -> Code
-compA (Var x) = [Fetch x]
-compA (Num n) = [Push n]
-compA (AAdd a1 a2) = compA a1 ++ compA a2 ++ [Add]
-compA (ASub a1 a2) = compA a2 ++ compA a1 ++ [Sub]
-compA (AMul a1 a2) = compA a1 ++ compA a2 ++ [Mult]
+compA (Var x) = [Fetch x]          -- Fetch the value of a variable from the state.
+compA (Num n) = [Push n]           -- Push a numeric literal onto the stack.
+compA (AAdd a1 a2) = compA a1 ++ compA a2 ++ [Add]    -- Compile addition operation.
+compA (ASub a1 a2) = compA a2 ++ compA a1 ++ [Sub]    -- Compile subtraction operation.
+compA (AMul a1 a2) = compA a1 ++ compA a2 ++ [Mult]   -- Compile multiplication operation.
 
+-- Function to compile boolean expressions (Bexp) into stack machine code (Code).
 compB :: Bexp -> Code
-compB BTrue = [Tru]
-compB BFalse = [Fals]
-compB (Eq a1 a2) = compA a1 ++ compA a2 ++ [Equ]
-compB (BLe a1 a2) = compA a2 ++ compA a1 ++ [Le]
-compB (Not b) = compB b ++ [Neg]
+compB BTrue = [Tru]               -- Push True onto the stack.
+compB BFalse = [Fals]              -- Push False onto the stack.
+compB (Eq a1 a2) = compA a1 ++ compA a2 ++ [Equ]    -- Compile equality check.
+compB (BLe a1 a2) = compA a2 ++ compA a1 ++ [Le]    -- Compile less than or equal check.
+compB (Not b) = compB b ++ [Neg]   -- Compile boolean negation.
 
+-- Function to compile a program into code.
 compile :: Program -> Code
-compile [] = []
+compile [] = []  -- Base case: Empty program.
 compile (stmt:rest) = case stmt of
-  Assign var expr -> compA expr ++ [Store var] ++ compile rest
-  Seq s1 -> compile s1 ++ compile rest
-  If cond thenStm elseStm -> compB cond ++ [Branch (compile thenStm) (compile elseStm)] ++ compile rest
-  While cond body -> [Loop (compB cond) (compile body)] ++ compile rest
+  Assign var expr -> compA expr ++ [Store var] ++ compile rest  -- Compile assignment.
+  Seq s1 -> compile s1 ++ compile rest               -- Compile sequence of statements.
+  If cond thenStm elseStm ->
+    compB cond ++ [Branch (compile thenStm) (compile elseStm)] ++ compile rest  -- Compile if statement.
+  While cond body ->
+    [Loop (compB cond) (compile body)] ++ compile rest           -- Compile while loop.
 
-
+-- Function to tokenize a string into a list of lexemes.
 lexer :: String -> [String]
-lexer "" = []
-lexer ('w':'h':'i':'l':'e':rest) = "while" : lexer rest
-lexer ('i':'f':rest) = "if" : lexer rest
-lexer ('t':'h':'e':'n':rest) = "then" : lexer rest
-lexer ('e':'l':'s':'e':rest) = "else" : lexer rest
-lexer ('*':rest) = "*" : lexer rest
-lexer ('+':rest) = "+" : lexer rest
-lexer ('/':rest) = "/" : lexer rest
-lexer ('-':rest) = "-" : lexer rest
-lexer (';':rest) = ";" : lexer rest
-lexer ('(':rest) = "(" : lexer rest
-lexer (')':rest) = ")" : lexer rest
-lexer ('<':'=':rest) = "<=" : lexer rest
-lexer ('=':'=':rest) = "==" : lexer rest
-lexer ('n':'o':'t':rest) = "not" : lexer rest
-lexer ('=':rest) = "=" : lexer rest
-lexer ('a':'n':'d':rest) = "and" : lexer rest
-lexer (':':'=':rest) = ":=" : lexer rest
-lexer ('d':'o':rest) = "do" : lexer rest
-lexer (' ':rest) = lexer rest
-lexer (a:rest) = lexeracc (a:rest) []
+lexer "" = []  -- Base case: Empty string results in an empty list of lexemes.
+lexer ('w':'h':'i':'l':'e':rest) = "while" : lexer rest  
+lexer ('i':'f':rest) = "if" : lexer rest  
+lexer ('t':'h':'e':'n':rest) = "then" : lexer rest  
+lexer ('e':'l':'s':'e':rest) = "else" : lexer rest 
+lexer ('*':rest) = "*" : lexer rest  
+lexer ('+':rest) = "+" : lexer rest  
+lexer ('/':rest) = "/" : lexer rest  
+lexer ('-':rest) = "-" : lexer rest 
+lexer (';':rest) = ";" : lexer rest  
+lexer ('(':rest) = "(" : lexer rest  
+lexer (')':rest) = ")" : lexer rest 
+lexer ('<':'=':rest) = "<=" : lexer rest  
+lexer ('=':'=':rest) = "==" : lexer rest  
+lexer ('n':'o':'t':rest) = "not" : lexer rest  
+lexer ('=':rest) = "=" : lexer rest 
+lexer ('a':'n':'d':rest) = "and" : lexer rest  
+lexer (':':'=':rest) = ":=" : lexer rest  
+lexer ('d':'o':rest) = "do" : lexer rest  
+lexer (' ':rest) = lexer rest  
+lexer (a:rest) = lexeracc (a:rest) [] 
 
+-- Helper function for accumulating characters until a separator is encountered.
 lexeracc :: String -> String -> [String]
-lexeracc "" stracc | stracc == "" = []
-                   | otherwise = [stracc]
-lexeracc (' ':rest) stracc | stracc == "" = lexer rest
-                          | otherwise = stracc : lexer rest
-lexeracc (a:rest) stracc = lexeracc rest (stracc ++ [a])
+lexeracc "" stracc | stracc == "" = []  -- If no accumulated characters, return an empty list.
+                   | otherwise = [stracc]  -- If there are accumulated characters, return them as a single-element list.
+lexeracc (' ':rest) stracc | stracc == "" = lexer rest  -- Skip spaces and continue tokenizing.
+                          | otherwise = stracc : lexer rest  -- If accumulated characters, add them to the list and continue tokenizing.
+lexeracc (a:rest) stracc = lexeracc rest (stracc ++ [a])  -- Continue accumulating characters.
 
 
 -- Parser for integers
@@ -227,18 +236,18 @@ parseVar [] = error "Unexpected end of input"
 
 -- Parser for arithmetic expressions
 parseAexp :: [String] -> (Aexp, [String])
-parseAexp ("(":rest) = trace ("Parsing in parentheses: " ++ show rest) (parseAexpInParens rest)
+parseAexp ("(":rest) = (parseAexpInParens rest)
 parseAexp (c:rest)
-  | all isDigit c = trace ("Parsed Num: " ++ show (read c :: Integer)) (Num (read c), rest)
-  | all isAlpha c = trace ("Parsed Var: " ++ c) (Var c, rest)
+  | all isDigit c = (Num (read c), rest)
+  | all isAlpha c = (Var c, rest)
   | c == "-" = case parseAexp rest of
-                 (a1, rest') -> trace ("Parsed Unary Minus: " ++ show (ASub (Num 0) a1)) (ASub (Num 0) a1, rest')
+                 (a1, rest') -> (ASub (Num 0) a1, rest')
   | otherwise = error "Invalid arithmetic expression"
 parseAexp _ = error "Invalid arithmetic expression"
 
 parseAexpInParens :: [String] -> (Aexp, [String])
 parseAexpInParens s = case parseAexp s of
-  (aexp, rest) -> trace ("Parsed expression in parentheses: " ++ show aexp) (aexp, rest)
+  (aexp, rest) -> (aexp, rest)
   _ -> error "Mismatched parentheses in arithmetic expression"
 
 -- Parser for boolean expressions
@@ -326,9 +335,10 @@ testParser programCode = (stack2Str stack, state2Str state)
 
 main :: IO ()
 main = do
-  let input1 = ["if", "True", "then", "x", ":=", "42", "else", "x", ":=", "10", ";"]
-  let (parsedStm1, remaining1) = parseStm input1
-  putStrLn "Test Case 1:"
-  putStrLn $ "Parsed Statement: " ++ show parsedStm1
-  putStrLn $ "Remaining Input: " ++ unwords remaining1
-  putStrLn ""
+  print (testParser "x := 5; x := x - 1;" == ("","x=4"))
+  print (testParser "if (not True and 2 <= 5 = 3 == 4) then x :=1; else y := 2;" == ("","y=2"))
+  print (testParser "x := 42; if x <= 43 then x := 1; else (x := 33; x := x+1;)" == ("","x=1"))
+  print (testParser "x := 42; if x <= 43 then x := 1; else x := 33; x := x+1;" == ("","x=2"))
+  print (testParser "x := 42; if x <= 43 then x := 1; else x := 33; x := x+1; z := x+x;" == ("","x=2,z=4"))
+  print (testParser "x := 2; y := (x - 3)*(4 + 2*3); z := x +x*(2);" == ("","x=2,y=-10,z=6"))
+  print (testParser "i := 10; fact := 1; while (not(i == 1)) do (fact := fact * i; i := i - 1;)" == ("","fact=3628800,i=1"))
