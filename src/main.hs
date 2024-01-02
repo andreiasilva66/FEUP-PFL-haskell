@@ -1,6 +1,7 @@
-import Data.List (intercalate, sortOn)
+import Data.List (intercalate, sortOn, elemIndex)
 import Stack
 import Data.Char
+import Text.Read (readMaybe)
 
 -- Define a data type 'Inst' representing instructions that can be executed.
 -- Each constructor corresponds to a specific operation or control flow instruction.
@@ -133,196 +134,269 @@ testAssembler code = (stack2Str stack, state2Str state)
 -- You should get an exception with the string: "Run-time error"
 
 -- Part 2
-
-data Aexp
-  = Var String            -- Variable
-  | Num Integer           -- Integer literal
-  | AAdd Aexp Aexp        -- Addition
-  | ASub Aexp Aexp        -- Subtraction
-  | AMul Aexp Aexp        -- Multiplication
-  deriving Show
-
-data Bexp
-  = BTrue                 -- True constant
-  | BFalse                -- False constant
-  | Eq Aexp Aexp          -- Equality
-  | BLe Aexp Aexp          -- Less than or equal to
-  | Not Bexp              -- Logical negation
-  | BAnd Bexp Bexp         -- Logical and
-  deriving Show
-
-data Stm
-  = Assign String Aexp    -- Assignment
-  | Seq [Stm]             -- Sequence of statements
-  | If Bexp [Stm] [Stm]   -- If-then-else statement
-  | While Bexp [Stm]      -- While loop
-  deriving Show
-
+data Aexp = Num Integer | Var String | AddA Aexp Aexp | SubA Aexp Aexp | MultA Aexp Aexp  deriving Show
+data Bexp = EquB Aexp Aexp | LeB Aexp Aexp | AndB Bexp Bexp | EquBoolB Bexp Bexp | NegB Bexp | TruB | FalsB  deriving Show
+data Stm = BranchS Bexp [Stm] [Stm] | LoopS Bexp [Stm] | VarAssign String Aexp deriving Show
 type Program = [Stm]
 
--- Compiler functions
 
--- Function to compile arithmetic expressions (Aexp) into stack machine code (Code).
 compA :: Aexp -> Code
-compA (Var x) = [Fetch x]          -- Fetch the value of a variable from the state.
-compA (Num n) = [Push n]           -- Push a numeric literal onto the stack.
-compA (AAdd a1 a2) = compA a1 ++ compA a2 ++ [Add]    -- Compile addition operation.
-compA (ASub a1 a2) = compA a2 ++ compA a1 ++ [Sub]    -- Compile subtraction operation.
-compA (AMul a1 a2) = compA a1 ++ compA a2 ++ [Mult]   -- Compile multiplication operation.
 
--- Function to compile boolean expressions (Bexp) into stack machine code (Code).
+compA (Num a) = [Push a]
+compA (Var a) = [Fetch a]
+compA (AddA a b) = compA b ++ compA a ++ [Add]
+compA (SubA a b) = compA b ++ compA a ++ [Sub]
+compA (MultA a b) = compA b ++ compA a ++ [Mult]
+
 compB :: Bexp -> Code
-compB BTrue = [Tru]               -- Push True onto the stack.
-compB BFalse = [Fals]              -- Push False onto the stack.
-compB (Eq a1 a2) = compA a1 ++ compA a2 ++ [Equ]    -- Compile equality check.
-compB (BLe a1 a2) = compA a2 ++ compA a1 ++ [Le]    -- Compile less than or equal check.
-compB (Not b) = compB b ++ [Neg]   -- Compile boolean negation.
+compB (EquB a b) = compA b ++ compA a ++ [Equ]
+compB (LeB a b) = compA b ++ compA a ++ [Le]
+compB (AndB a b) = compB b ++ compB a ++ [And]
+compB (NegB a) = compB a ++ [Neg]
+compB (EquBoolB a b) = compB b ++ compB a ++ [Equ]
+compB TruB = [Tru]
+compB FalsB = [Fals]
 
--- Function to compile a program into code.
 compile :: Program -> Code
-compile [] = []  -- Base case: Empty program.
-compile (stmt:rest) = case stmt of
-  Assign var expr -> compA expr ++ [Store var] ++ compile rest  -- Compile assignment.
-  Seq s1 -> compile s1 ++ compile rest               -- Compile sequence of statements.
-  If cond thenStm elseStm ->
-    compB cond ++ [Branch (compile thenStm) (compile elseStm)] ++ compile rest  -- Compile if statement.
-  While cond body ->
-    [Loop (compB cond) (compile body)] ++ compile rest           -- Compile while loop.
+compile stms = concatMap compileStm stms
 
--- Function to tokenize a string into a list of lexemes.
-lexer :: String -> [String]
-lexer "" = []  -- Base case: Empty string results in an empty list of lexemes.
-lexer ('w':'h':'i':'l':'e':rest) = "while" : lexer rest  
-lexer ('i':'f':rest) = "if" : lexer rest  
-lexer ('t':'h':'e':'n':rest) = "then" : lexer rest  
-lexer ('e':'l':'s':'e':rest) = "else" : lexer rest 
-lexer ('*':rest) = "*" : lexer rest  
-lexer ('+':rest) = "+" : lexer rest  
-lexer ('/':rest) = "/" : lexer rest  
-lexer ('-':rest) = "-" : lexer rest 
-lexer (';':rest) = ";" : lexer rest  
-lexer ('(':rest) = "(" : lexer rest  
-lexer (')':rest) = ")" : lexer rest 
-lexer ('<':'=':rest) = "<=" : lexer rest  
-lexer ('=':'=':rest) = "==" : lexer rest  
-lexer ('n':'o':'t':rest) = "not" : lexer rest  
-lexer ('=':rest) = "=" : lexer rest 
-lexer ('a':'n':'d':rest) = "and" : lexer rest  
-lexer (':':'=':rest) = ":=" : lexer rest  
-lexer ('d':'o':rest) = "do" : lexer rest  
-lexer (' ':rest) = lexer rest  
-lexer (a:rest) = lexeracc (a:rest) [] 
-
--- Helper function for accumulating characters until a separator is encountered.
-lexeracc :: String -> String -> [String]
-lexeracc "" stracc | stracc == "" = []  -- If no accumulated characters, return an empty list.
-                   | otherwise = [stracc]  -- If there are accumulated characters, return them as a single-element list.
-lexeracc (' ':rest) stracc | stracc == "" = lexer rest  -- Skip spaces and continue tokenizing.
-                          | otherwise = stracc : lexer rest  -- If accumulated characters, add them to the list and continue tokenizing.
-lexeracc (a:rest) stracc = lexeracc rest (stracc ++ [a])  -- Continue accumulating characters.
-
-
--- Parser for integers
-parseInt :: String -> (Integer, String)
-parseInt s = (read numStr, rest)
-  where
-    (numStr, rest) = span isDigit s
-
--- Parser for variable names
-parseVar :: [String] -> (String, [String])
-parseVar (c:cs) | all isAlpha c = (c, cs)
-                | otherwise = error "Invalid variable name"
-parseVar [] = error "Unexpected end of input"
-
--- Parser for arithmetic expressions
-parseAexp :: [String] -> (Aexp, [String])
-parseAexp ("(":rest) = (parseAexpInParens rest)
-parseAexp (c:rest)
-  | all isDigit c = (Num (read c), rest)
-  | all isAlpha c = (Var c, rest)
-  | c == "-" = case parseAexp rest of
-                 (a1, rest') -> (ASub (Num 0) a1, rest')
-  | otherwise = error "Invalid arithmetic expression"
-parseAexp _ = error "Invalid arithmetic expression"
-
-parseAexpInParens :: [String] -> (Aexp, [String])
-parseAexpInParens s = case parseAexp s of
-  (aexp, rest) -> (aexp, rest)
-  _ -> error "Mismatched parentheses in arithmetic expression"
-
--- Parser for boolean expressions
-parseBexp :: [String] -> (Bexp, [String])
-parseBexp ("True":rest) = (BTrue, rest)
-parseBexp ("False":rest) = (BFalse, rest)
-parseBexp ("not":rest) = case parseBexp rest of
-  (bexp, after) -> (Not bexp, after)
-parseBexp ("(":rest) = parseBexpInParens rest
-parseBexp _ = error "Invalid boolean expression"
-
-parseBexpInParens :: [String] -> (Bexp, [String])
-parseBexpInParens s = case parseBexp s of
-  (bexp, ")":rest) -> (bexp, rest)
-  _ -> error "Mismatched parentheses in boolean expression"
-
--- Parser for statements
-parseStm :: [String] -> (Stm, [String])
-parseStm ("if":rest) = parseIf rest
-parseStm ("while":rest) = parseWhile rest
-parseStm (var:":=":rest) = case parseAexp rest of
-  (expr, after) -> (Assign var expr, after)
-parseStm _ = error "Invalid statement"
-
--- Parser for assignment statements
-parseAssignment :: [String] -> (Stm, [String])
-parseAssignment s = case parseVar s of
-  (var, ":=":rest) ->
-    case parseAexp rest of
-      (expr, after) -> (Assign var expr, after)
-  _ -> error "Invalid assignment statement"
-
-parseSequence :: [String] -> ([Stm], [String])
-parseSequence s = case parseStm s of
-  (stmt, rest) -> case rest of
-    (";":rest') -> case parseSequence rest' of
-      (stmts, rest'') -> (stmt : stmts, rest'')
-    _ -> ([stmt], rest)
-
-parseIf :: [String] -> (Stm, [String])
-parseIf s =
-  case parseBexp s of
-    (cond, rest) ->
-      case parseStm rest of
-        (thenBranch, rest') ->
-          case rest' of
-            ("else":rest'') ->
-              case parseStm rest'' of
-                (elseBranch, rest''') -> (If cond [thenBranch] [elseBranch], rest''')
-            _ -> error "Invalid if-then-else statement"
-        -- _ -> error "Invalid if-then-else statement"
-
-parseWhile :: [String] -> (Stm, [String])
-parseWhile s =
-  case parseBexp s of
-    (cond, rest) ->
-      case parseStm rest of
-        (body, rest') -> (While cond [body], rest')
-
--- Parser for the entire program
--- parseProgram :: [String] -> (Program, [String])
--- parseProgram s = parseSequence s
+compileStm :: Stm -> Code
+compileStm stm = case stm of
+  VarAssign var aexp -> compA aexp ++ [Store var]
+  BranchS bexp stm1 stm2  -> compB bexp ++ [Branch (compile stm1) (compile stm2)]
+  LoopS bexp stm     -> [Loop (compB bexp) (compile stm)]
 
 parse :: String -> Program
-parse input =
-  case parseSequence (lexer input) of
-    (program, remaining) ->
-      if null remaining
-        then program
-        else error $ "Parsing error. Remaining input: " ++ unwords remaining
+parse str = parseaux (lexer str) []
+
+parseaux :: [String] -> [Stm] -> [Stm]
+parseaux [] stm = stm
+parseaux (a:":=":rest) stm = let x = (getjustvalue (elemIndex ";" (a:":=":rest)))
+                              in case parseSumOrProdOrIntOrPar (drop 2 (take (x-1) (a:":=":rest))) of
+                                Just (expr,[]) -> parseaux (drop x (a:":=":rest)) (stm++[(VarAssign a (expr))])
+                                Nothing -> error "Parse Error"
+                                _ -> error "Parse Error"
+parseaux ("(":rest) stm = parseaux (drop (getjustvalue (elemIndex ")" ("(":rest))) ("(":rest)) (stm++(parseaux (drop 1 (take ((getjustvalue (elemIndex ")" ("(":rest)))-1) ("(":rest))) []))
+parseaux (";":rest) stm = parseaux rest stm
+parseaux ("if":rest) stm = let thenpos = (getjustvalue (elemIndex "then" ("if":rest)))
+                               elsepos = (getjustvalue (elemIndex "else" ("if":rest)))
+                               arrayafter = (drop (elsepos) ("if":rest))
+                            in case takefirstelement arrayafter of
+                              "(" -> parseaux (drop (getjustvalue (elemIndex ")" arrayafter)) arrayafter) (stm++[BranchS (getJustvalueBexp ((parseAndandBoolEq (checkifPar (drop 1 (take (thenpos-1) ("if":rest))))))) (parseaux (drop thenpos (take (elsepos-1) ("if":rest))) []) (parseaux (take (getjustvalue (elemIndex ")" arrayafter)) arrayafter ) [] )])
+                              _  -> parseaux (drop (getjustvalue (elemIndex ";" arrayafter)) arrayafter) (stm++[BranchS (getJustvalueBexp ((parseAndandBoolEq (checkifPar (drop 1 (take (thenpos-1) ("if":rest))))))) (parseaux (drop thenpos (take (elsepos-1) ("if":rest))) []) (parseaux (take (getjustvalue (elemIndex ";" arrayafter)) arrayafter ) [] )])
+parseaux ("while":rest) stm = let dopos = (getjustvalue (elemIndex "do" ("while":rest)))
+                                  arrayafter = (drop (dopos) ("while":rest))
+                              in case takefirstelement arrayafter of
+                                "(" -> parseaux (drop (getjustvalue (elemIndex ")" arrayafter)) arrayafter) (stm++[LoopS (getJustvalueBexp ((parseAndandBoolEq (checkifPar (drop 1 (take (dopos-1) ("while":rest))))))) (parseaux (take (getjustvalue (elemIndex ")" arrayafter)) arrayafter ) [] )])
+                                _ -> parseaux (drop (getjustvalue (elemIndex ";" arrayafter)) arrayafter) (stm++[LoopS (getJustvalueBexp ((parseAndandBoolEq (checkifPar (drop 1 (take (dopos-1) ("while":rest))))))) (parseaux (take (getjustvalue (elemIndex ";" arrayafter)) arrayafter ) [] )])
+
+
+getJustvalueBexp :: Maybe (Bexp,[String]) -> Bexp
+getJustvalueBexp (Just (a,[")"])) = a
+getJustvalueBexp (Just (a,[])) = a
+getJustvalueBexp Nothing = error "Parse Error"
+
+checkifPar :: [String] -> [String]
+checkifPar ("(":rest) = drop 1 (take (length ("(":rest)) ("(":rest))
+checkifPar rest = rest
+
+takefirstelement :: [String] -> String
+takefirstelement ("(":rest) = "("
+takefirstelement (a:rest) = a
+
+parseInt :: [String] -> Maybe (Aexp,[String])
+parseInt (n:rest) =
+  case (readMaybe n :: Maybe Integer) of
+    Just f -> Just (Num f, rest)
+    Nothing -> Just (Var n,rest)
+parseInt _ = Nothing
+
+parseProdOrInt :: [String] -> Maybe(Aexp,[String])
+parseProdOrInt str =
+  case parseInt str of
+    Just (expr1,("*":restString1)) ->
+      case parseProdOrInt restString1 of
+        Just (expr2,restString2) ->
+          Just (MultA expr1 expr2,restString2)
+        Nothing                  -> Nothing
+    result -> result
+
+parseSumOrProdOrInt :: [String] -> Maybe(Aexp,[String])
+parseSumOrProdOrInt str =
+  case parseProdOrInt str of
+    Just (expr1,("+":restString1)) ->
+      case parseSumOrProdOrInt restString1 of
+        Just (expr2,restString2) ->
+          Just (AddA expr1 expr2,restString2)
+        Nothing                  -> Nothing
+    Just (expr1,("-":restString1)) ->
+      case parseSumOrProdOrInt restString1 of
+        Just (expr2,restString2) ->
+          Just (SubA expr1 expr2,restString2)
+        Nothing                  -> Nothing
+    result -> result
+
+parseIntOrParentExpr :: [String] -> Maybe (Aexp,[String])
+parseIntOrParentExpr ("(":rest) =
+  case parseSumOrProdOrIntOrPar rest of
+    Just (expr,(")":restString1)) -> Just (expr,restString1)
+    Just _ -> Nothing
+    Nothing -> Nothing
+parseIntOrParentExpr (n:rest) =
+  case (readMaybe n :: Maybe Integer) of
+    Just f -> Just (Num f, rest)
+    Nothing -> Just (Var n,rest)
+parseIntOrParentExpr _ = Nothing
+
+parseProdOrIntOrPar :: [String] -> Maybe (Aexp,[String])
+parseProdOrIntOrPar rest =
+  case parseIntOrParentExpr rest of
+    Just (expr1,("*":restString1)) ->
+      case parseProdOrIntOrPar restString1 of
+        Just (expr2,restString2) -> Just (MultA expr1 expr2, restString2)
+        Nothing -> Nothing
+    result -> result
+
+parseSumOrProdOrIntOrPar :: [String] -> Maybe (Aexp,[String])
+parseSumOrProdOrIntOrPar rest =
+  case parseProdOrIntOrPar rest of
+    Just (expr1,("+":restString1)) ->
+      case parseSumOrProdOrIntOrPar restString1 of
+        Just (expr2,restString2) -> Just (AddA expr1 expr2, restString2)
+        Nothing -> Nothing
+    Just (expr1,("-":restString1)) ->
+      case parseSumOrProdOrIntOrPar restString1 of
+        Just (expr2,restString2) -> Just (SubA expr1 expr2, restString2)
+        Nothing -> Nothing
+    result -> result
+
+------------- PARSE Bexp ----------------
+
+parseLessOrEqOrTrueOrFalseOrParentOrArith :: [String] -> Maybe (Bexp,[String])
+parseLessOrEqOrTrueOrFalseOrParentOrArith ("(":rest) =
+  case parseAndandBoolEq rest of
+    Just (expr,(")":restString1)) -> Just (expr,restString1)
+    Just _ -> Nothing
+    Nothing -> Nothing
+parseLessOrEqOrTrueOrFalseOrParentOrArith ("True":rest) = Just (TruB,rest)
+parseLessOrEqOrTrueOrFalseOrParentOrArith ("False":rest) = Just (FalsB,rest)
+parseLessOrEqOrTrueOrFalseOrParentOrArith rest =
+  case parseSumOrProdOrIntOrPar rest of
+    Just (expr1,("<=":restString1)) ->
+      case parseSumOrProdOrIntOrPar restString1 of
+        Just (expr2,restString2) ->
+          Just (LeB expr1 expr2, restString2)
+        Nothing -> Nothing
+    Just (expr1,("==":restString1)) ->
+      case parseSumOrProdOrIntOrPar restString1 of
+        Just (expr2,restString2) ->
+          Just (EquB expr1 expr2, restString2)
+        Nothing -> Nothing
+    result -> Nothing
+
+parseNegAndLessAndEq :: [String] -> Maybe(Bexp, [String])
+parseNegAndLessAndEq ("not":rest) =
+    case parseLessOrEqOrTrueOrFalseOrParentOrArith rest of
+      Just (expr1,restString1) ->
+        Just (NegB expr1,restString1)
+      result -> result
+parseNegAndLessAndEq rest = parseLessOrEqOrTrueOrFalseOrParentOrArith rest
+
+parseBoolEqAndNeg :: [String] -> Maybe(Bexp, [String])
+parseBoolEqAndNeg rest =
+  case parseNegAndLessAndEq rest of
+    Just (expr1, ("=":restString1)) ->
+      case parseBoolEqAndNeg restString1 of
+        Just (expr2, restString2) ->
+          Just (EquBoolB expr1 expr2, restString2)
+        Nothing -> Nothing
+    result -> result
+
+parseAndandBoolEq :: [String] -> Maybe(Bexp,[String])
+parseAndandBoolEq rest =
+  case parseBoolEqAndNeg rest of
+    Just (expr1, ("and":restString1)) ->
+      case parseAndandBoolEq restString1 of
+        Just (expr2, restString2) ->
+          Just (AndB expr1 expr2, restString2)
+        Nothing -> Nothing
+    result -> result
+    
+
+-----------------------------------------
+
+getjustvalue :: Num a => Maybe a -> a
+getjustvalue (Just a) = a+1
+
+lexer :: String -> [String]
+lexer string = lexeracc string [] []
+
+lexeracc :: String -> [String] -> String -> [String]
+lexeracc [] acc stracc | stracc == "" =  acc
+                       | otherwise = (acc++[stracc])
+lexeracc ('w':'h':'i':'l':'e':rest) acc stracc
+                            | stracc == "" = lexeracc rest (acc++["while"]) stracc
+                            | otherwise = lexeracc rest (acc++[stracc]++["while"]) []
+lexeracc (' ':rest) acc stracc
+                            | stracc == "" = lexeracc rest acc []
+                            | otherwise = lexeracc rest (acc++[stracc]) []
+lexeracc ('i':'f':rest) acc stracc
+                      	    | stracc == "" = lexeracc rest (acc++["if"]) stracc
+                            | otherwise = lexeracc rest (acc++[stracc]++["if"]) []
+lexeracc ('t':'h':'e':'n':rest) acc stracc
+                            | stracc == "" = lexeracc rest (acc++["then"]) stracc
+                            | otherwise = lexeracc rest (acc++[stracc]++["then"]) []
+lexeracc ('e':'l':'s':'e':rest) acc stracc
+                            | stracc == "" = lexeracc rest (acc++["else"]) stracc
+                            | otherwise = lexeracc rest (acc++[stracc]++["else"]) []
+lexeracc ('*':rest) acc stracc
+                            | stracc == "" = lexeracc rest (acc++["*"]) stracc
+                            | otherwise = lexeracc rest (acc++[stracc]++["*"]) []
+lexeracc ('+':rest) acc stracc
+                            | stracc == "" = lexeracc rest (acc++["+"]) stracc
+                            | otherwise = lexeracc rest (acc++[stracc]++["+"]) []
+lexeracc ('/':rest) acc stracc
+                            | stracc == "" = lexeracc rest (acc++["/"]) stracc
+                            | otherwise = lexeracc rest (acc++[stracc]++["/"]) []
+lexeracc ('-':rest) acc stracc
+                            | stracc == "" = lexeracc rest (acc++["-"]) stracc
+                            | otherwise = lexeracc rest (acc++[stracc]++["-"]) []
+lexeracc (';':rest) acc stracc
+                            | stracc == "" = lexeracc rest (acc++[";"]) stracc
+                            | otherwise = lexeracc rest (acc++[stracc]++[";"]) []
+lexeracc ('(':rest) acc stracc
+                            | stracc == "" = lexeracc rest (acc++["("]) stracc
+                            | otherwise = lexeracc rest (acc++[stracc]++["("]) []
+lexeracc (')':rest) acc stracc
+                            | stracc == "" = lexeracc rest (acc++[")"]) stracc
+                            | otherwise = lexeracc rest (acc++[stracc]++[")"]) []
+lexeracc ('<':'=':rest) acc stracc
+                            | stracc == "" = lexeracc rest (acc++["<="]) stracc
+                            | otherwise = lexeracc rest (acc++[stracc]++["<="]) []
+lexeracc ('=':'=':rest) acc stracc
+                            | stracc == "" = lexeracc rest (acc++["=="]) stracc
+                            | otherwise = lexeracc rest (acc++[stracc]++["=="]) []
+lexeracc ('n':'o':'t':rest) acc stracc
+                            | stracc == "" = lexeracc rest (acc++["not"]) stracc
+                            | otherwise = lexeracc rest (acc++[stracc]++["not"]) []
+lexeracc ('=':rest) acc stracc
+                            | stracc == "" = lexeracc rest (acc++["="]) stracc
+                            | otherwise = lexeracc rest (acc++[stracc]++["="]) []
+lexeracc ('a':'n':'d':rest) acc stracc
+                            | stracc == "" = lexeracc rest (acc++["and"]) stracc
+                            | otherwise = lexeracc rest (acc++[stracc]++["and"]) []
+lexeracc (':':'=':rest) acc stracc
+                            | stracc == "" = lexeracc rest (acc++[":="]) stracc
+                            | otherwise = lexeracc rest (acc++[stracc]++[":="]) []
+lexeracc ('d':'o':rest) acc stracc
+                            | stracc == "" = lexeracc rest (acc++["do"]) stracc
+                            | otherwise = lexeracc rest (acc++[stracc]++["do"]) []                              
+lexeracc (a:rest) acc stracc = lexeracc rest acc (stracc++[a])
 
 -- To help you test your parser
 testParser :: String -> (String, String)
 testParser programCode = (stack2Str stack, state2Str state)
-  where (_, stack, state) = run (compile (parse programCode), createEmptyStack, createEmptyState)
+  where (_,stack,state) = run(compile (parse programCode), createEmptyStack, createEmptyState)
 
 -- Examples:
 -- testParser "x := 5; x := x - 1;" == ("","x=4")
@@ -335,6 +409,7 @@ testParser programCode = (stack2Str stack, state2Str state)
 
 main :: IO ()
 main = do
+  -- print(testAssembler [Push 10,Push 4,Push 3,Sub,Mult] == ("-10",""))
   print (testParser "x := 5; x := x - 1;" == ("","x=4"))
   print (testParser "if (not True and 2 <= 5 = 3 == 4) then x :=1; else y := 2;" == ("","y=2"))
   print (testParser "x := 42; if x <= 43 then x := 1; else (x := 33; x := x+1;)" == ("","x=1"))
