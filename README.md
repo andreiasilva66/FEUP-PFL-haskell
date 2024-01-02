@@ -1,12 +1,14 @@
 # Programação Functional e em Lógica
 
+This Haskell project simulates the execution of a low-level machine with configurations represented as tuples (c, e, s), where c is a list of instructions (code), e is the evaluation stack, and s is the storage. The project also includes a small imperative programming language with arithmetic and boolean expressions, supporting assignments, sequences of statements, conditional (if-then-else) statements, and while loops.
+
 ## Authors
 - Group T11_G06
 - Andreia Filipa Gonçalves Silva (up202108769) - Participation: 50%
 - Miguel Morais Dionísio (up202108788) - Participation: 50%
 
 ## Execution
-To compile the program and run it, execute:
+To compile the program and run it, execute in the src folder:
 ```
 ghc -o program stack.hs main.hs
 ./program
@@ -18,12 +20,13 @@ It follows a type-safe approach by utilizing algebraic data types (StackElement)
 ### Data and Types
 ``` data StackElement = BoolElem Bool | IntElem Integer deriving Show ```
 Represents elements that can be stored in the stack. Two possible variants: BoolElem for boolean elements and IntElem for integer elements. The deriving Show clause allows the elements to be displayed.
+
 ``` type Stack = [StackElement] ```
 Represents a stack of elements. Is represented by a list of StackElements.
 
 ### Functions
 
-This module includes the common stack functions: push, pop, top...
+This module includes the common stack functions: push, pop, top, empty, isEmpty and top specific functions depending on the data expected ```getInt getBool```.
 
 ## Part 1 
 
