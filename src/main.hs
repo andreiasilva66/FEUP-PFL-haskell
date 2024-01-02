@@ -81,12 +81,12 @@ store x state stack =
         Just _  -> entry : filter (\(name, _) -> name /= fst entry) state
         Nothing -> entry : state
 
--- -- Constants representing True and False as BoolElems.
--- tt :: Bool
--- tt = True
+-- Constants representing True and False as BoolElems.
+tt :: Bool
+tt = True
 
--- ff :: Bool
--- ff = False
+ff :: Bool
+ff = False
 
 -- Function to execute a list of instructions (Code) given the current stack and state.
 -- Returns a tuple containing the remaining instructions, the updated stack, and the updated state.
@@ -148,7 +148,7 @@ data Bexp
   | Eq Aexp Aexp          -- Equality
   | BLe Aexp Aexp          -- Less than or equal to
   | Not Bexp              -- Logical negation
-  | And Bexp Bexp         -- Logical and
+  | BAnd Bexp Bexp         -- Logical and
   deriving Show
 
 data Stm
