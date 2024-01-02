@@ -80,3 +80,65 @@ Handles arithmetic operations, boolean operations, variable fetching/storing, an
 Returns a tuple containing the remaining instructions, the updated stack, and the updated state. 
 
 ## Part 2
+
+In the second part of TP2, our objective is to define a compiler for a small imperative programming language.
+
+### Data and Types
+
+```data Aexp = Num Integer | Var String | AddA Aexp Aexp | SubA Aexp Aexp | MultA Aexp Aexp  deriving Show
+``` for arithmetic expressions.
+```data Bexp = EquB Aexp Aexp | LeB Aexp Aexp | AndB Bexp Bexp | EquBoolB Bexp Bexp | NegB Bexp | TruB | FalsB  deriving Show
+``` for boolean expressions.
+```data Stm = BranchS Bexp [Stm] [Stm] | LoopS Bexp [Stm] | VarAssign String Aexp deriving Show
+``` for statements
+```type Program = [Stm]``` uma lista de statements.
+
+### Functions
+
+```compile :: [Stm] -> Code```
+ This function compiles a program (a list of statements) into Code.
+
+```compA :: Aexp -> Code```
+This function compiles an arithmetic expression (Aexp) into a sequence of instructions (Code).
+    If the Aexp is Num, it pushes it into the stack.
+    If the Aexp is a Var, it fetches its value.
+    If Aexp is an addition, subtraction, or multiplication, it compiles both Aexps and adds an Add, Sub, or Mult instruction to the Code.
+
+```compB :: Bexp -> Code```
+ This function compiles a boolean expression (Bexp) into a sequence of instructions (Code).
+
+```compileStm :: Stm -> Code```
+ This function compiles an individual statement (Stm) into a Code.
+
+```parse :: String -> Program```
+ This function parses a string representation of a program and returns the corresponding program structure.
+
+```parseaux :: [String] -> [Stm]```
+ This function is a helper function for parse and recursively parses the input string.
+
+```getJustvalueBexp :: Maybe Bexp -> Bexp```
+ This function extracts the Bexp from a Maybe value, throwing an error if it is nothing.
+
+```checkifPar :: [String] -> [String]```
+ This function checks if a list of strings starts with a parenthesis and returns the remaining strings without the parenthesis.
+
+```takefirstelement :: [String] -> String```
+ This function returns the first element of a list of strings.
+
+```parseInt :: [String] -> Either Aexp Var```
+ This function parses a list of strings into an Aexp or a Var.
+
+```parseProdOrInt :: [String] -> Either Aexp Aexp```
+ This function parses a list of strings into a product or an arithmetic expression (Aexp).
+
+```parseSumOrProdOrInt :: [String] -> Either Aexp Aexp```
+ This function parses a list of strings into a sum, difference, or an arithmetic expression (Aexp).
+
+```parseIntOrParentExpr :: [String] -> Either Aexp Aexp```
+ This function parses a list of strings into an arithmetic expression (Aexp) or a parenthesized expression.
+
+```parseProdOrIntOrPar :: [String] -> Either Aexp Aexp```
+ This function parses a list of strings into a product, an arithmetic expression, or a parenthesized expression.
+
+```parseSumOrProdOrIntOrPar :: [String] -> Either Aexp Aexp```
+ This function parses a list of strings into a sum, difference, an arithmetic expression, or a parenthesized expression.
