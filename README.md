@@ -125,20 +125,20 @@ This function compiles an arithmetic expression (Aexp) into a sequence of instru
 ```parseInt :: [String] -> Maybe(Aexp,[String])``
  Parses a list of strings into an Aexp or a Var.
 
-```parseIntProd :: [String] -> Maybe(Aexp,[String])```
+```parseMult :: [String] -> Maybe(Aexp,[String])```
  This function parses a list of strings into a product or an Aexp.
 
-```parseIntProdSum :: [String] -> Maybe(Aexp,[String])```
+```parseAddSub :: [String] -> Maybe(Aexp,[String])```
  This function parses a list of strings into a sum, difference, or an Aexp.
 
-```parseIntPrntExp :: [String] -> Maybe (Aexp,[String])```
+```parseParent :: [String] -> Maybe (Aexp,[String])```
  This function parses a list of strings into an Aexp or a parenthesized expression.
 
-```parseIntProdPrnt :: [String] -> Maybe (Aexp,[String])```
+```parseParentMult :: [String] -> Maybe (Aexp,[String])```
  This function parses a list of strings into a product, an Aexp, or a parenthesized expression.
 
-```parseIntProdPrntSum :: [String] -> Maybe (Aexp,[String])```
+```parseParentSum :: [String] -> Maybe (Aexp,[String])```
  This function parses a list of strings into a sum, difference, an arithmetic expression, or a parenthesized expression.
 
 ``` parseAllBexp :: [String] -> Maybe (Bexp,[String]) ```
-This function parses a list of strings into a boolean expression (Bexp) along with the remaining strings, handling different cases such as parentheses, boolean literals, and comparison operators.
+This function parses a list of strings into a boolean expression, handling different cases such as parentheses, boolean literals, and comparison operators.
