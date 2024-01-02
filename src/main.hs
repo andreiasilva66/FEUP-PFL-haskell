@@ -134,225 +134,90 @@ testAssembler code = (stack2Str stack, state2Str state)
 -- You should get an exception with the string: "Run-time error"
 
 -- Part 2
-data Aexp = Num Integer 
-  | Var String 
-  | AddA Aexp Aexp 
-  | SubA Aexp Aexp 
-  | MultA Aexp Aexp  deriving Show
 
-data Bexp = EquB Aexp Aexp 
-  | LeB Aexp Aexp 
-  | AndB Bexp Bexp 
-  | EquBoolB Bexp Bexp 
-  | NegB Bexp 
-  | TruB 
-  | FalsB  deriving Show
+-- Abstract syntax for arithmetic expressions
+data Aexp
+  = Num Integer          -- Integer literal
+  | Var String           -- Variable
+  | AddA Aexp Aexp       -- Addition
+  | SubA Aexp Aexp       -- Subtraction
+  | MultA Aexp Aexp      -- Multiplication
+  deriving Show
 
-data Stm = BranchS Bexp [Stm] [Stm] 
-  | LoopS Bexp [Stm] 
-  | VarAssign String Aexp deriving Show
+-- Abstract syntax for boolean expressions
+data Bexp
+  = EquB Aexp Aexp       -- Equality
+  | LeB Aexp Aexp        -- Less than or equal to
+  | AndB Bexp Bexp       -- Logical AND
+  | EquBoolB Bexp Bexp   -- Equality of boolean expressions
+  | NegB Bexp            -- Logical negation
+  | TruB                 -- True constant
+  | FalsB                -- False constant
+  deriving Show
 
+-- Abstract syntax for statements
+data Stm
+  = BranchS Bexp [Stm] [Stm]  -- If-then-else statement
+  | LoopS Bexp [Stm]          -- While loop
+  | VarAssign String Aexp     -- Variable assignment
+  deriving Show
+
+-- Type synonym for a program (sequence of statements)
 type Program = [Stm]
 
+-- Code generation for arithmetic expressions
 compA :: Aexp -> Code
-
 compA (Num a) = [Push a]
 compA (Var a) = [Fetch a]
 compA (AddA a b) = compA b ++ compA a ++ [Add]
 compA (SubA a b) = compA b ++ compA a ++ [Sub]
 compA (MultA a b) = compA b ++ compA a ++ [Mult]
 
+-- Code generation for boolean expressions
 compB :: Bexp -> Code
-compB (EquB a b) = compA b ++ compA a ++ [Equ]
-compB (LeB a b) = compA b ++ compA a ++ [Le]
-compB (AndB a b) = compB b ++ compB a ++ [And]
-compB (NegB a) = compB a ++ [Neg]
-compB (EquBoolB a b) = compB b ++ compB a ++ [Equ]
 compB TruB = [Tru]
 compB FalsB = [Fals]
+compB (AndB a b) = compB b ++ compB a ++ [And]
+compB (NegB a) = compB a ++ [Neg]
+compB (EquB a b) = compA b ++ compA a ++ [Equ]
+compB (LeB a b) = compA b ++ compA a ++ [Le]
+compB (EquBoolB a b) = compB b ++ compB a ++ [Equ]
 
+-- Code generation for programs
+-- For each statement calls the function cmpOneStm
 compile :: Program -> Code
 compile stms = concatMap cmpOneStm stms
 
+-- Code generation for a single statement
 cmpOneStm :: Stm -> Code
 cmpOneStm stm = case stm of
   VarAssign var value -> compA value ++ [Store var]
   BranchS bexp stm1 stm2  -> compB bexp ++ [Branch (compile stm1) (compile stm2)]
   LoopS bexp stm -> [Loop (compB bexp) (compile stm)]
 
-parse :: String -> Program
-parse str = parseAcc (lexer str) []
-
-parseAcc :: [String] -> [Stm] -> [Stm]
-parseAcc [] stm = stm
-parseAcc (a:":=":rest) stm = let x = (getInnerValue (elemIndex ";" (a:":=":rest)))
-  in case parseIntProdPrntSum (drop 2 (take (x-1) (a:":=":rest))) of
-    Just (expr,[]) -> parseAcc (drop x (a:":=":rest)) (stm++[(VarAssign a (expr))])
-    Nothing -> error "Parse Error"
-    _ -> error "Parse Error"
-parseAcc ("(":rest) stm = parseAcc (drop (getInnerValue (elemIndex ")" ("(":rest))) ("(":rest)) (stm++(parseAcc (drop 1 (take ((getInnerValue (elemIndex ")" ("(":rest)))-1) ("(":rest))) []))
-parseAcc (";":rest) stm = parseAcc rest stm
-parseAcc ("if":rest) stm = let thenpos = (getInnerValue (elemIndex "then" ("if":rest)))
-                               elsepos = (getInnerValue (elemIndex "else" ("if":rest)))
-                               arrayafter = (drop (elsepos) ("if":rest))
-                            in case getFirstChar arrayafter of
-                              "(" -> parseAcc (drop (getInnerValue (elemIndex ")" arrayafter)) arrayafter) (stm++[BranchS (getJustValueBExp ((parseAndEqBool (parMatch (drop 1 (take (thenpos-1) ("if":rest))))))) (parseAcc (drop thenpos (take (elsepos-1) ("if":rest))) []) (parseAcc (take (getInnerValue (elemIndex ")" arrayafter)) arrayafter ) [] )])
-                              _  -> parseAcc (drop (getInnerValue (elemIndex ";" arrayafter)) arrayafter) (stm++[BranchS (getJustValueBExp ((parseAndEqBool (parMatch (drop 1 (take (thenpos-1) ("if":rest))))))) (parseAcc (drop thenpos (take (elsepos-1) ("if":rest))) []) (parseAcc (take (getInnerValue (elemIndex ";" arrayafter)) arrayafter ) [] )])
-parseAcc ("while":rest) stm = let dopos = (getInnerValue (elemIndex "do" ("while":rest)))
-                                  arrayafter = (drop (dopos) ("while":rest))
-                              in case getFirstChar arrayafter of
-                                "(" -> parseAcc (drop (getInnerValue (elemIndex ")" arrayafter)) arrayafter) (stm++[LoopS (getJustValueBExp ((parseAndEqBool (parMatch (drop 1 (take (dopos-1) ("while":rest))))))) (parseAcc (take (getInnerValue (elemIndex ")" arrayafter)) arrayafter ) [] )])
-                                _ -> parseAcc (drop (getInnerValue (elemIndex ";" arrayafter)) arrayafter) (stm++[LoopS (getJustValueBExp ((parseAndEqBool (parMatch (drop 1 (take (dopos-1) ("while":rest))))))) (parseAcc (take (getInnerValue (elemIndex ";" arrayafter)) arrayafter ) [] )])
-
-
-getJustValueBExp :: Maybe (Bexp,[String]) -> Bexp
-getJustValueBExp (Just (a,[")"])) = a
-getJustValueBExp (Just (a,[])) = a
-getJustValueBExp Nothing = error "Parse Error"
-
-parMatch :: [String] -> [String]
-parMatch ("(":rest) = drop 1 (take (length ("(":rest)) ("(":rest))
-parMatch rest = rest
-
-getFirstChar :: [String] -> String
-getFirstChar (a:rest) = a
-
-parseInt :: [String] -> Maybe (Aexp,[String])
-parseInt (n:rest) =
-  case (readMaybe n :: Maybe Integer) of
-    Just f -> Just (Num f, rest)
-    Nothing -> Just (Var n,rest)
-parseInt _ = Nothing
-
-parseIntProd :: [String] -> Maybe(Aexp,[String])
-parseIntProd str =
-  case parseInt str of
-    Just (expr1,("*":restString1)) ->
-      case parseIntProd restString1 of
-        Just (expr2,restString2) ->
-          Just (MultA expr1 expr2,restString2)
-        Nothing                  -> Nothing
-    result -> result
-
-parseIntProdSum :: [String] -> Maybe(Aexp,[String])
-parseIntProdSum str =
-  case parseIntProd str of
-    Just (expr1,("+":restString1)) ->
-      case parseIntProdSum restString1 of
-        Just (expr2,restString2) ->
-          Just (AddA expr1 expr2,restString2)
-        Nothing                  -> Nothing
-    Just (expr1,("-":restString1)) ->
-      case parseIntProdSum restString1 of
-        Just (expr2,restString2) ->
-          Just (SubA expr1 expr2,restString2)
-        Nothing                  -> Nothing
-    result -> result
-
-parseIntPrntExp :: [String] -> Maybe (Aexp,[String])
-parseIntPrntExp ("(":rest) =
-  case parseIntProdPrntSum rest of
-    Just (expr,(")":restString1)) -> Just (expr,restString1)
-    Just _ -> Nothing
-    Nothing -> Nothing
-parseIntPrntExp (n:rest) =
-  case (readMaybe n :: Maybe Integer) of
-    Just f -> Just (Num f, rest)
-    Nothing -> Just (Var n,rest)
-parseIntPrntExp _ = Nothing
-
-parseIntProdPrnt :: [String] -> Maybe (Aexp,[String])
-parseIntProdPrnt rest =
-  case parseIntPrntExp rest of
-    Just (expr1,("*":restString1)) ->
-      case parseIntProdPrnt restString1 of
-        Just (expr2,restString2) -> Just (MultA expr1 expr2, restString2)
-        Nothing -> Nothing
-    result -> result
-
-parseIntProdPrntSum :: [String] -> Maybe (Aexp,[String])
-parseIntProdPrntSum rest =
-  case parseIntProdPrnt rest of
-    Just (expr1,("+":restString1)) ->
-      case parseIntProdPrntSum restString1 of
-        Just (expr2,restString2) -> Just (AddA expr1 expr2, restString2)
-        Nothing -> Nothing
-    Just (expr1,("-":restString1)) ->
-      case parseIntProdPrntSum restString1 of
-        Just (expr2,restString2) -> Just (SubA expr1 expr2, restString2)
-        Nothing -> Nothing
-    result -> result
-
-------------- PARSE Bexp ----------------
-
-parseAllBexp :: [String] -> Maybe (Bexp,[String])
-parseAllBexp ("(":rest) =
-  case parseAndEqBool rest of
-    Just (expr,(")":restString1)) -> Just (expr,restString1)
-    Just _ -> Nothing
-    Nothing -> Nothing
-parseAllBexp ("True":rest) = Just (TruB,rest)
-parseAllBexp ("False":rest) = Just (FalsB,rest)
-parseAllBexp rest =
-  case parseIntProdPrntSum rest of
-    Just (expr1,("<=":restString1)) ->
-      case parseIntProdPrntSum restString1 of
-        Just (expr2,restString2) ->
-          Just (LeB expr1 expr2, restString2)
-        Nothing -> Nothing
-    Just (expr1,("==":restString1)) ->
-      case parseIntProdPrntSum restString1 of
-        Just (expr2,restString2) ->
-          Just (EquB expr1 expr2, restString2)
-        Nothing -> Nothing
-    result -> Nothing
-
-parseAndNegEqLe :: [String] -> Maybe(Bexp, [String])
-parseAndNegEqLe ("not":rest) =
-    case parseAllBexp rest of
-      Just (expr1,restString1) ->
-        Just (NegB expr1,restString1)
-      result -> result
-parseAndNegEqLe rest = parseAllBexp rest
-
-parseAndNegEqBool :: [String] -> Maybe(Bexp, [String])
-parseAndNegEqBool rest =
-  case parseAndNegEqLe rest of
-    Just (expr1, ("=":restString1)) ->
-      case parseAndNegEqBool restString1 of
-        Just (expr2, restString2) ->
-          Just (EquBoolB expr1 expr2, restString2)
-        Nothing -> Nothing
-    result -> result
-
-parseAndEqBool :: [String] -> Maybe(Bexp,[String])
-parseAndEqBool rest =
-  case parseAndNegEqBool rest of
-    Just (expr1, ("and":restString1)) ->
-      case parseAndEqBool restString1 of
-        Just (expr2, restString2) ->
-          Just (AndB expr1 expr2, restString2)
-        Nothing -> Nothing
-    result -> result
-    
-
------------------------------------------
-
-getInnerValue :: Num a => Maybe a -> a
-getInnerValue (Just a) = a+1
-
+-- Lexical analysis: Convert a string into a list of tokens
 lexer :: String -> [String]
 lexer string = lexeraux string [] []
 
+-- Helper function for lexical analysis
 lexeraux :: String -> [String] -> String -> [String]
 lexeraux [] listStr currentStr | currentStr == "" =  listStr
                        | otherwise = (listStr++[currentStr])
-lexeraux ('w':'h':'i':'l':'e':rest) listStr currentStr
-  | currentStr == "" = lexeraux rest (listStr++["while"]) currentStr
-  | otherwise = lexeraux rest (listStr++[currentStr]++["while"]) []
+lexeraux (':':'=':rest) listStr currentStr
+  | currentStr == "" = lexeraux rest (listStr++[":="]) currentStr
+  | otherwise = lexeraux rest (listStr++[currentStr]++[":="]) []
 lexeraux (' ':rest) listStr currentStr
   | currentStr == "" = lexeraux rest listStr []
   | otherwise = lexeraux rest (listStr++[currentStr]) []
+lexeraux ('+':rest) listStr currentStr
+  | currentStr == "" = lexeraux rest (listStr++["+"]) currentStr
+  | otherwise = lexeraux rest (listStr++[currentStr]++["+"]) []
+lexeraux ('-':rest) listStr currentStr
+  | currentStr == "" = lexeraux rest (listStr++["-"]) currentStr
+  | otherwise = lexeraux rest (listStr++[currentStr]++["-"]) []
+lexeraux ('*':rest) listStr currentStr
+  | currentStr == "" = lexeraux rest (listStr++["*"]) currentStr
+  | otherwise = lexeraux rest (listStr++[currentStr]++["*"]) []
 lexeraux ('i':'f':rest) listStr currentStr
   | currentStr == "" = lexeraux rest (listStr++["if"]) currentStr
   | otherwise = lexeraux rest (listStr++[currentStr]++["if"]) []
@@ -362,18 +227,6 @@ lexeraux ('t':'h':'e':'n':rest) listStr currentStr
 lexeraux ('e':'l':'s':'e':rest) listStr currentStr
   | currentStr == "" = lexeraux rest (listStr++["else"]) currentStr
   | otherwise = lexeraux rest (listStr++[currentStr]++["else"]) []
-lexeraux ('*':rest) listStr currentStr
-  | currentStr == "" = lexeraux rest (listStr++["*"]) currentStr
-  | otherwise = lexeraux rest (listStr++[currentStr]++["*"]) []
-lexeraux ('+':rest) listStr currentStr
-  | currentStr == "" = lexeraux rest (listStr++["+"]) currentStr
-  | otherwise = lexeraux rest (listStr++[currentStr]++["+"]) []
-lexeraux ('/':rest) listStr currentStr
-  | currentStr == "" = lexeraux rest (listStr++["/"]) currentStr
-  | otherwise = lexeraux rest (listStr++[currentStr]++["/"]) []
-lexeraux ('-':rest) listStr currentStr
-  | currentStr == "" = lexeraux rest (listStr++["-"]) currentStr
-  | otherwise = lexeraux rest (listStr++[currentStr]++["-"]) []
 lexeraux (';':rest) listStr currentStr
   | currentStr == "" = lexeraux rest (listStr++[";"]) currentStr
   | otherwise = lexeraux rest (listStr++[currentStr]++[";"]) []
@@ -398,13 +251,184 @@ lexeraux ('=':rest) listStr currentStr
 lexeraux ('a':'n':'d':rest) listStr currentStr
   | currentStr == "" = lexeraux rest (listStr++["and"]) currentStr
   | otherwise = lexeraux rest (listStr++[currentStr]++["and"]) []
-lexeraux (':':'=':rest) listStr currentStr
-  | currentStr == "" = lexeraux rest (listStr++[":="]) currentStr
-  | otherwise = lexeraux rest (listStr++[currentStr]++[":="]) []
+lexeraux ('w':'h':'i':'l':'e':rest) listStr currentStr
+  | currentStr == "" = lexeraux rest (listStr++["while"]) currentStr
+  | otherwise = lexeraux rest (listStr++[currentStr]++["while"]) []
 lexeraux ('d':'o':rest) listStr currentStr
   | currentStr == "" = lexeraux rest (listStr++["do"]) currentStr
   | otherwise = lexeraux rest (listStr++[currentStr]++["do"]) []                              
 lexeraux (a:rest) listStr currentStr = lexeraux rest listStr (currentStr++[a])
+
+-- Parsing: Convert a list of tokens into a program
+parse :: String -> Program
+parse str = parseAcc (lexer str) []
+
+-- Helper function for parsing
+parseAcc :: [String] -> [Stm] -> [Stm]
+parseAcc [] stm = stm
+parseAcc (a:":=":rest) stm = let x = (getInnerValue (elemIndex ";" (a:":=":rest)))
+  in case parseParentSum (drop 2 (take (x-1) (a:":=":rest))) of
+    Just (expr,[]) -> parseAcc (drop x (a:":=":rest)) (stm++[(VarAssign a (expr))])
+    Nothing -> error $ "Run-time error"
+    _ -> error $ "Run-time error"
+parseAcc ("(":rest) stm = parseAcc (drop (getInnerValue (elemIndex ")" ("(":rest))) ("(":rest)) (stm++(parseAcc (drop 1 (take ((getInnerValue (elemIndex ")" ("(":rest)))-1) ("(":rest))) []))
+parseAcc (";":rest) stm = parseAcc rest stm
+parseAcc ("if":rest) stm = let thenpos = (getInnerValue (elemIndex "then" ("if":rest)))
+                               elsepos = (getInnerValue (elemIndex "else" ("if":rest)))
+                               arrayafter = (drop (elsepos) ("if":rest))
+                            in case getFirstChar arrayafter of
+                              "(" -> parseAcc (drop (getInnerValue (elemIndex ")" arrayafter)) arrayafter) (stm++[BranchS (getJustValueBExp ((parseAnd (parMatch (drop 1 (take (thenpos-1) ("if":rest))))))) (parseAcc (drop thenpos (take (elsepos-1) ("if":rest))) []) (parseAcc (take (getInnerValue (elemIndex ")" arrayafter)) arrayafter ) [] )])
+                              _  -> parseAcc (drop (getInnerValue (elemIndex ";" arrayafter)) arrayafter) (stm++[BranchS (getJustValueBExp ((parseAnd (parMatch (drop 1 (take (thenpos-1) ("if":rest))))))) (parseAcc (drop thenpos (take (elsepos-1) ("if":rest))) []) (parseAcc (take (getInnerValue (elemIndex ";" arrayafter)) arrayafter ) [] )])
+parseAcc ("while":rest) stm = let dopos = (getInnerValue (elemIndex "do" ("while":rest)))
+                                  arrayafter = (drop (dopos) ("while":rest))
+                              in case getFirstChar arrayafter of
+                                "(" -> parseAcc (drop (getInnerValue (elemIndex ")" arrayafter)) arrayafter) (stm++[LoopS (getJustValueBExp ((parseAnd (parMatch (drop 1 (take (dopos-1) ("while":rest))))))) (parseAcc (take (getInnerValue (elemIndex ")" arrayafter)) arrayafter ) [] )])
+                                _ -> parseAcc (drop (getInnerValue (elemIndex ";" arrayafter)) arrayafter) (stm++[LoopS (getJustValueBExp ((parseAnd (parMatch (drop 1 (take (dopos-1) ("while":rest))))))) (parseAcc (take (getInnerValue (elemIndex ";" arrayafter)) arrayafter ) [] )])
+
+-- Parsing integer or variable expressions
+parseInt :: [String] -> Maybe (Aexp,[String])
+parseInt (n:rest) =
+  case (readMaybe n :: Maybe Integer) of
+    Just f -> Just (Num f, rest)
+    Nothing -> Just (Var n,rest)
+parseInt _ = Nothing
+
+-- Parsing multiplication operations in expressions
+parseMult :: [String] -> Maybe(Aexp,[String])
+parseMult str =
+  case parseInt str of
+    Just (expr1,("*":restString1)) ->
+      case parseMult restString1 of
+        Just (expr2,restString2) ->
+          Just (MultA expr1 expr2,restString2)
+        Nothing                  -> Nothing
+    result -> result
+
+-- Parsing addition or subtraction operations in expressions
+parseAddSub :: [String] -> Maybe(Aexp,[String])
+parseAddSub str =
+  case parseMult str of
+    Just (expr1,("+":restString1)) ->
+      case parseAddSub restString1 of
+        Just (expr2,restString2) ->
+          Just (AddA expr1 expr2,restString2)
+        Nothing                  -> Nothing
+    Just (expr1,("-":restString1)) ->
+      case parseAddSub restString1 of
+        Just (expr2,restString2) ->
+          Just (SubA expr1 expr2,restString2)
+        Nothing                  -> Nothing
+    result -> result
+
+-- Parsing expressions with parentheses
+parseParent :: [String] -> Maybe (Aexp,[String])
+parseParent rest =
+  case parseParentMult rest of
+    Just (expr1,("*":restString1)) ->
+      case parseParent restString1 of
+        Just (expr2,restString2) -> Just (MultA expr1 expr2, restString2)
+        Nothing -> Nothing
+    result -> result
+
+-- Parses expressions within parentheses and handles addition or subtraction operations
+parseParentSum :: [String] -> Maybe (Aexp,[String])
+parseParentSum rest =
+  case parseParent rest of
+    Just (expr1,("+":restString1)) ->
+      case parseParentSum restString1 of
+        Just (expr2,restString2) -> Just (AddA expr1 expr2, restString2)
+        Nothing -> Nothing
+    Just (expr1,("-":restString1)) ->
+      case parseParentSum restString1 of
+        Just (expr2,restString2) -> Just (SubA expr1 expr2, restString2)
+        Nothing -> Nothing
+    result -> result
+
+-- Parses expressions within parentheses and handles multiplication operations
+parseParentMult :: [String] -> Maybe (Aexp,[String])
+parseParentMult ("(":rest) =
+  case parseParentSum rest of
+    Just (expr,(")":restString1)) -> Just (expr,restString1)
+    Just _ -> Nothing
+    Nothing -> Nothing
+parseParentMult (n:rest) =
+  case (readMaybe n :: Maybe Integer) of
+    Just f -> Just (Num f, rest)
+    Nothing -> Just (Var n,rest)
+parseParentMult _ = Nothing
+
+-- Parses Boolean expressions with possible parentheses
+parseParentBool :: [String] -> Maybe (Bexp,[String])
+parseParentBool ("(":rest) =
+  case parseAnd rest of
+    Just (expr,(")":restString1)) -> Just (expr,restString1)
+    Just _ -> Nothing
+    Nothing -> Nothing
+parseParentBool ("True":rest) = Just (TruB,rest)
+parseParentBool ("False":rest) = Just (FalsB,rest)
+parseParentBool rest =
+  case parseParentSum rest of
+    Just (expr1,("<=":restString1)) ->
+      case parseParentSum restString1 of
+        Just (expr2,restString2) ->
+          Just (LeB expr1 expr2, restString2)
+        Nothing -> Nothing
+    Just (expr1,("==":restString1)) ->
+      case parseParentSum restString1 of
+        Just (expr2,restString2) ->
+          Just (EquB expr1 expr2, restString2)
+        Nothing -> Nothing
+    result -> Nothing
+
+-- Parses NOT Boolean operations
+parseNot :: [String] -> Maybe(Bexp, [String])
+parseNot ("not":rest) =
+    case parseParentBool rest of
+      Just (expr1,restString1) ->
+        Just (NegB expr1,restString1)
+      result -> result
+parseNot rest = parseParentBool rest
+
+-- Parses AND Boolean operations
+parseAnd :: [String] -> Maybe(Bexp,[String])
+parseAnd rest =
+  case parseEqual rest of
+    Just (expr1, ("and":restString1)) ->
+      case parseAnd restString1 of
+        Just (expr2, restString2) ->
+          Just (AndB expr1 expr2, restString2)
+        Nothing -> Nothing
+    result -> result
+
+-- Parses Equal Boolean operations
+parseEqual :: [String] -> Maybe(Bexp, [String])
+parseEqual rest =
+  case parseNot rest of
+    Just (expr1, ("=":restString1)) ->
+      case parseEqual restString1 of
+        Just (expr2, restString2) ->
+          Just (EquBoolB expr1 expr2, restString2)
+        Nothing -> Nothing
+    result -> result
+    
+-- Extracts the inner value of a 'Maybe' tuple containing a 'Bexp' and remaining strings
+getJustValueBExp :: Maybe (Bexp,[String]) -> Bexp
+getJustValueBExp (Just (a,[")"])) = a
+getJustValueBExp (Just (a,[])) = a
+getJustValueBExp Nothing = error $ "Run-time error"
+
+-- Extracts the inner numerical value from a 'Maybe' wrapped number
+getInnerValue :: Num a => Maybe a -> a
+getInnerValue (Just a) = a+1
+
+-- Matches parentheses and returns the rest of the string after matching
+parMatch :: [String] -> [String]
+parMatch ("(":rest) = drop 1 (take (length ("(":rest)) ("(":rest))
+parMatch rest = rest
+
+-- Helper function to get the first character of a string
+getFirstChar :: [String] -> String
+getFirstChar (a:rest) = a
 
 -- To help you test your parser
 testParser :: String -> (String, String)
