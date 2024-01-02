@@ -273,23 +273,23 @@ parseAcc (a:":=":rest) stm = let x = (getInnerValue (elemIndex ";" (a:":=":rest)
     _ -> error $ "Run-time error"
 parseAcc ("(":rest) stm = parseAcc (drop (getInnerValue (elemIndex ")" ("(":rest))) ("(":rest)) (stm++(parseAcc (drop 1 (take ((getInnerValue (elemIndex ")" ("(":rest)))-1) ("(":rest))) []))
 parseAcc (";":rest) stm = parseAcc rest stm
-parseAcc ("if":rest) stm = let thenpos = (getInnerValue (elemIndex "then" ("if":rest)))
-                               elsepos = (getInnerValue (elemIndex "else" ("if":rest)))
-                               arrayafter = (drop (elsepos) ("if":rest))
-                            in case getFirstChar arrayafter of
-                              "(" -> parseAcc (drop (getInnerValue (elemIndex ")" arrayafter)) arrayafter) (stm++[BranchS (getJustValueBExp ((parseAnd (parMatch (drop 1 (take (thenpos-1) ("if":rest))))))) (parseAcc (drop thenpos (take (elsepos-1) ("if":rest))) []) (parseAcc (take (getInnerValue (elemIndex ")" arrayafter)) arrayafter ) [] )])
-                              _  -> parseAcc (drop (getInnerValue (elemIndex ";" arrayafter)) arrayafter) (stm++[BranchS (getJustValueBExp ((parseAnd (parMatch (drop 1 (take (thenpos-1) ("if":rest))))))) (parseAcc (drop thenpos (take (elsepos-1) ("if":rest))) []) (parseAcc (take (getInnerValue (elemIndex ";" arrayafter)) arrayafter ) [] )])
-parseAcc ("while":rest) stm = let dopos = (getInnerValue (elemIndex "do" ("while":rest)))
-                                  arrayafter = (drop (dopos) ("while":rest))
-                              in case getFirstChar arrayafter of
-                                "(" -> parseAcc (drop (getInnerValue (elemIndex ")" arrayafter)) arrayafter) (stm++[LoopS (getJustValueBExp ((parseAnd (parMatch (drop 1 (take (dopos-1) ("while":rest))))))) (parseAcc (take (getInnerValue (elemIndex ")" arrayafter)) arrayafter ) [] )])
-                                _ -> parseAcc (drop (getInnerValue (elemIndex ";" arrayafter)) arrayafter) (stm++[LoopS (getJustValueBExp ((parseAnd (parMatch (drop 1 (take (dopos-1) ("while":rest))))))) (parseAcc (take (getInnerValue (elemIndex ";" arrayafter)) arrayafter ) [] )])
+parseAcc ("if":rest) stm = let thenIdx = (getInnerValue (elemIndex "then" ("if":rest)))
+                               elseIdx = (getInnerValue (elemIndex "else" ("if":rest)))
+                               restList = (drop (elseIdx) ("if":rest))
+                            in case getFirstChar restList of
+                              "(" -> parseAcc (drop (getInnerValue (elemIndex ")" restList)) restList) (stm++[BranchS (getJustValueBExp ((parseAnd (parMatch (drop 1 (take (thenIdx-1) ("if":rest))))))) (parseAcc (drop thenIdx (take (elseIdx-1) ("if":rest))) []) (parseAcc (take (getInnerValue (elemIndex ")" restList)) restList ) [] )])
+                              _  -> parseAcc (drop (getInnerValue (elemIndex ";" restList)) restList) (stm++[BranchS (getJustValueBExp ((parseAnd (parMatch (drop 1 (take (thenIdx-1) ("if":rest))))))) (parseAcc (drop thenIdx (take (elseIdx-1) ("if":rest))) []) (parseAcc (take (getInnerValue (elemIndex ";" restList)) restList ) [] )])
+parseAcc ("while":rest) stm = let doIdx = (getInnerValue (elemIndex "do" ("while":rest)))
+                                  restList = (drop (doIdx) ("while":rest))
+                              in case getFirstChar restList of
+                                "(" -> parseAcc (drop (getInnerValue (elemIndex ")" restList)) restList) (stm++[LoopS (getJustValueBExp ((parseAnd (parMatch (drop 1 (take (doIdx-1) ("while":rest))))))) (parseAcc (take (getInnerValue (elemIndex ")" restList)) restList ) [] )])
+                                _ -> parseAcc (drop (getInnerValue (elemIndex ";" restList)) restList) (stm++[LoopS (getJustValueBExp ((parseAnd (parMatch (drop 1 (take (doIdx-1) ("while":rest))))))) (parseAcc (take (getInnerValue (elemIndex ";" restList)) restList ) [] )])
 
 -- Parsing integer or variable expressions
 parseInt :: [String] -> Maybe (Aexp,[String])
 parseInt (n:rest) =
   case (readMaybe n :: Maybe Integer) of
-    Just f -> Just (Num f, rest)
+    Just v -> Just (Num v, rest)
     Nothing -> Just (Var n,rest)
 parseInt _ = Nothing
 
@@ -297,10 +297,10 @@ parseInt _ = Nothing
 parseMult :: [String] -> Maybe(Aexp,[String])
 parseMult str =
   case parseInt str of
-    Just (expr1,("*":restString1)) ->
-      case parseMult restString1 of
-        Just (expr2,restString2) ->
-          Just (MultA expr1 expr2,restString2)
+    Just (exp1,("*":str1)) ->
+      case parseMult str1 of
+        Just (exp2,str2) ->
+          Just (MultA exp1 exp2,str2)
         Nothing                  -> Nothing
     result -> result
 
@@ -308,15 +308,15 @@ parseMult str =
 parseAddSub :: [String] -> Maybe(Aexp,[String])
 parseAddSub str =
   case parseMult str of
-    Just (expr1,("+":restString1)) ->
-      case parseAddSub restString1 of
-        Just (expr2,restString2) ->
-          Just (AddA expr1 expr2,restString2)
+    Just (exp1,("+":str1)) ->
+      case parseAddSub str1 of
+        Just (exp2,str2) ->
+          Just (AddA exp1 exp2,str2)
         Nothing                  -> Nothing
-    Just (expr1,("-":restString1)) ->
-      case parseAddSub restString1 of
-        Just (expr2,restString2) ->
-          Just (SubA expr1 expr2,restString2)
+    Just (exp1,("-":str1)) ->
+      case parseAddSub str1 of
+        Just (exp2,str2) ->
+          Just (SubA exp1 exp2,str2)
         Nothing                  -> Nothing
     result -> result
 
@@ -324,9 +324,9 @@ parseAddSub str =
 parseParent :: [String] -> Maybe (Aexp,[String])
 parseParent rest =
   case parseParentMult rest of
-    Just (expr1,("*":restString1)) ->
-      case parseParent restString1 of
-        Just (expr2,restString2) -> Just (MultA expr1 expr2, restString2)
+    Just (exp1,("*":str1)) ->
+      case parseParent str1 of
+        Just (exp2,str2) -> Just (MultA exp1 exp2, str2)
         Nothing -> Nothing
     result -> result
 
@@ -334,13 +334,13 @@ parseParent rest =
 parseParentSum :: [String] -> Maybe (Aexp,[String])
 parseParentSum rest =
   case parseParent rest of
-    Just (expr1,("+":restString1)) ->
-      case parseParentSum restString1 of
-        Just (expr2,restString2) -> Just (AddA expr1 expr2, restString2)
+    Just (exp1,("+":str1)) ->
+      case parseParentSum str1 of
+        Just (exp2,str2) -> Just (AddA exp1 exp2, str2)
         Nothing -> Nothing
-    Just (expr1,("-":restString1)) ->
-      case parseParentSum restString1 of
-        Just (expr2,restString2) -> Just (SubA expr1 expr2, restString2)
+    Just (exp1,("-":str1)) ->
+      case parseParentSum str1 of
+        Just (exp2,str2) -> Just (SubA exp1 exp2, str2)
         Nothing -> Nothing
     result -> result
 
@@ -348,7 +348,7 @@ parseParentSum rest =
 parseParentMult :: [String] -> Maybe (Aexp,[String])
 parseParentMult ("(":rest) =
   case parseParentSum rest of
-    Just (expr,(")":restString1)) -> Just (expr,restString1)
+    Just (expr,(")":str1)) -> Just (expr,str1)
     Just _ -> Nothing
     Nothing -> Nothing
 parseParentMult (n:rest) =
@@ -361,22 +361,22 @@ parseParentMult _ = Nothing
 parseParentBool :: [String] -> Maybe (Bexp,[String])
 parseParentBool ("(":rest) =
   case parseAnd rest of
-    Just (expr,(")":restString1)) -> Just (expr,restString1)
+    Just (expr,(")":str1)) -> Just (expr,str1)
     Just _ -> Nothing
     Nothing -> Nothing
 parseParentBool ("True":rest) = Just (TruB,rest)
 parseParentBool ("False":rest) = Just (FalsB,rest)
 parseParentBool rest =
   case parseParentSum rest of
-    Just (expr1,("<=":restString1)) ->
-      case parseParentSum restString1 of
-        Just (expr2,restString2) ->
-          Just (LeB expr1 expr2, restString2)
+    Just (exp1,("<=":str1)) ->
+      case parseParentSum str1 of
+        Just (exp2,str2) ->
+          Just (LeB exp1 exp2, str2)
         Nothing -> Nothing
-    Just (expr1,("==":restString1)) ->
-      case parseParentSum restString1 of
-        Just (expr2,restString2) ->
-          Just (EquB expr1 expr2, restString2)
+    Just (exp1,("==":str1)) ->
+      case parseParentSum str1 of
+        Just (exp2,str2) ->
+          Just (EquB exp1 exp2, str2)
         Nothing -> Nothing
     result -> Nothing
 
@@ -384,8 +384,8 @@ parseParentBool rest =
 parseNot :: [String] -> Maybe(Bexp, [String])
 parseNot ("not":rest) =
     case parseParentBool rest of
-      Just (expr1,restString1) ->
-        Just (NegB expr1,restString1)
+      Just (exp1,str1) ->
+        Just (NegB exp1,str1)
       result -> result
 parseNot rest = parseParentBool rest
 
@@ -393,10 +393,10 @@ parseNot rest = parseParentBool rest
 parseAnd :: [String] -> Maybe(Bexp,[String])
 parseAnd rest =
   case parseEqual rest of
-    Just (expr1, ("and":restString1)) ->
-      case parseAnd restString1 of
-        Just (expr2, restString2) ->
-          Just (AndB expr1 expr2, restString2)
+    Just (exp1, ("and":str1)) ->
+      case parseAnd str1 of
+        Just (exp2, str2) ->
+          Just (AndB exp1 exp2, str2)
         Nothing -> Nothing
     result -> result
 
@@ -404,10 +404,10 @@ parseAnd rest =
 parseEqual :: [String] -> Maybe(Bexp, [String])
 parseEqual rest =
   case parseNot rest of
-    Just (expr1, ("=":restString1)) ->
-      case parseEqual restString1 of
-        Just (expr2, restString2) ->
-          Just (EquBoolB expr1 expr2, restString2)
+    Just (exp1, ("=":str1)) ->
+      case parseEqual str1 of
+        Just (exp2, str2) ->
+          Just (EquBoolB exp1 exp2, str2)
         Nothing -> Nothing
     result -> result
     
